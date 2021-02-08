@@ -40,6 +40,7 @@ Questions:
 - First implement a grid approximation (hint check paragraph 2.4.1!) with a uniform prior, calculate the posterior and plot the results
 
 ```{r}
+############################ THE RICCARDO KNOWLEDGE #################################
 # Making grid approximation and uniform prior
 riccardo <- tibble(
   p_grid = seq(0,1, length.out = 20),
@@ -68,6 +69,7 @@ ggplot(riccardo, aes(p_grid, posterior))+
 - N.B. for the rest of the exercise just keep using the grid approximation (we'll move to quadratic approximations in two classes)
 
 ```{r}
+############################ RICCARDO WITH QUADRATIC APPROXIMATION ##############################
 # Quadratic approximation
 qa <- quap(
   alist(
@@ -87,6 +89,7 @@ curve(dnorm(x, 0.5, 0.2), lty = 2)
 2. Estimate all the teachers' knowledge of CogSci. Who's best? Use grid approximation. Comment on the posteriors of Riccardo and Mikkel.
 
 ```{r}
+############################ ALL THE TEACHERS KNOWLEDGE #################################
 # Making the grid and prior
 df <- tibble(
   p_grid = seq(0, 1, length.out = 100),
@@ -112,6 +115,7 @@ df <- tibble(
 2a. Produce plots of the prior, and posterior for each teacher.
 
 ```{r}
+############################ PLOTTING OF TEACHERS #################################
 # Plotting
 ggplot(df, aes(p_grid, Posterior, color = Teacher))+
   geom_line()+
@@ -123,6 +127,7 @@ ggplot(df, aes(p_grid, Posterior, color = Teacher))+
 
 3. Change the prior. Given your teachers have all CogSci jobs, you should start with a higher appreciation of their knowledge: the prior is a normal distribution with a mean of 0.8 and a standard deviation of 0.2. Do the results change (and if so how)?
 ```{r}
+############################ ALL TEACHERS WITH NORMAL PRIOR #################################
 # Making the grid and prior
 df_qa <- tibble(
   p_grid = seq(0, 1, length.out = 100),
@@ -148,6 +153,7 @@ df_qa <- tibble(
 
 3a. Produce plots of the prior and posterior for each teacher.
 ```{r}
+############################ PLOTTING WITH NORMAL PRIOR #################################
 # Plotting data
 plot_qa <- 
   ggplot(df_qa, aes(p_grid, Posterior, color = Teacher))+
@@ -169,7 +175,7 @@ plot_prior+plot_qa
 4. You go back to your teachers and collect more data (multiply the previous numbers by 100). Calculate their knowledge with both a uniform prior and a normal prior with a mean of 0.8 and a standard deviation of 0.2. Do you still see a difference between the results? Why?
 
 ```{r}
-#############################  THE UNIFORM PRIOR ############################################
+#############################  THE UNIFORM PRIOR * 100 OBS #######################################
 sequence_length = 1000
 
 # Making the grid and prior
@@ -196,7 +202,7 @@ df_1 <- tibble(
 
 
 ```{r}
-#############################  THE NORMAL PRIOR ############################################
+#############################  THE NORMAL PRIOR * 100 OBS #################################
 # Making the grid and prior
 df_qa_1 <- tibble(
   p_grid = seq(0, 1, length.out = sequence_length),
@@ -220,7 +226,7 @@ df_qa_1 <- tibble(
 ```
 
 ```{r}
-############################ PLOTTING WITH THE NEW OBS #################################
+############################ PLOTTING * 100 OBS #################################
 # Plotting data with uniform prior
 plot_1 <- 
   ggplot(df_1, aes(p_grid, Posterior, color = Teacher))+
