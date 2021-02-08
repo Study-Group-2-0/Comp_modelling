@@ -49,8 +49,8 @@ riccardo <- tibble(
 # Calculating the likelihood, unstd. posterior and std. posterior
   mutate(
     likelihood = dbinom(3, size = 6, prob = p_grid),
-    unstd_post = likelihood*prior,
-    posterior = unstd_post/sum(likelihood)
+    unstd_post = likelihood*prior, # unstd. posterior
+    posterior = unstd_post/sum(unstd_post) # std. posterior
   )
 
 # Plotting
@@ -108,7 +108,7 @@ df <- tibble(
     cols = starts_with("likelihood"),
     names_to = "Teacher",
     values_to = "Posterior"
-  )%>% 
+  ) %>% 
   separate(Teacher, c(NA, "Teacher"), sep = "_", convert = TRUE)
 ```
 
