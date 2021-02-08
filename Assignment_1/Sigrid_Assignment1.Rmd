@@ -28,20 +28,158 @@ This is the data:
 - Daina: 160 correct answers out of 198 questions (Daina never gets bored)
 - Mikkel: 66 correct answers out of 132 questions
 
+```{r}
+#loading packages
+pacman::p_load(tidyverse, rethinking, reshape2)
+```
+
 Questions:
 
 1. What's Riccardo's estimated knowledge of CogSci? What is the probability he knows more than chance (0.5) [try figuring this out. if you can't peek into chapters 3.1 and 3.2 and/or the slides]?
 - First implement a grid approximation (hint check paragraph 2.4.1!) with a uniform prior, calculate the posterior and plot the results
+
+```{r}
+#####################3
+# number of points in the grid
+dens = 20
+
+bayesian_ric <- tibble(
+  pgrid = seq(0, 1, length.out = dens), # making grid approximation
+  prior = 1 # stating prior (constant, uniform)
+#  prior = ifelse(pgrid < 0.5, 0, 1)
+  ) %>% 
+  mutate(
+  likelihood = dbinom(3, size = 6, prob = pgrid), #calculating likelihood based on binomial distribution
+  unstd.post = likelihood * prior, #calculating the un-standardized posterior
+  posterior = unstd.post/sum(unstd.post) #calculating the standardized posterior
+)
+
+#plotting Riccardo's probability 
+ggplot(bayesian_ric, aes(pgrid, posterior)) +
+  geom_point() + geom_line() + theme_classic() + geom_line(aes(pgrid, prior/dens, color = 'red')) + xlab('Knowledge of CogSci (pgrid) ') + ylab('Posterior probability')
+
+# The probability that he knows more than by chance is ..
+bayesian_ric_50 <- filter(bayesian_ric, bayesian_ric$pgrid > 0.5)
+sum(bayesian_ric_50$posterior)
+
+# det kunne jeg have sagt mig selv. 50% sandsynlighed..
+  
+```
+The probability that he knows more than by chance is 50% (because he answered 3 out of 6 questions correctly)
+
+
 - Then implement a quadratic approximation (hint check paragraph 2.4.2!).
 - N.B. for the rest of the exercise just keep using the grid approximation (we'll move to quadratic approximations in two classes)
 
+```{r}
+################## QUADRATIC APPROXIMATION #####################
+ric.qa <- quap(
+  alist(
+    Co ~ dbinom(Co + Fa, p) , # binomial likelihood 
+    p ~ dunif(0,1) # uniform prior
+    ), 
+data = list(Co = 3, Fa = 3)
+)
+# display summary of quadratic approximation
+precis(ric.qa)
+
+# mean of 0.5, SD = 0.2
+```
 2. Estimate all the teachers' knowledge of CogSci. Who's best? Use grid approximation. Comment on the posteriors of Riccardo and Mikkel.
 2a. Produce plots of the prior, and posterior for each teacher.
 
+```{r}
+################### ALL THE TEACHERS - WHO'S BEST? ###################
+dens = 100
+
+df_all <- tibble(
+  pgrid = seq(0, 1, length.out = dens), # making grid approximation
+  prior = 1 # stating prior (constant, uniform)
+#  prior = ifelse(pgrid < 0.5, 0, 1)
+  ) %>% 
+  mutate(
+    #calculating likelihood based on binomial distribution --> posterior
+  Riccardo_unstd_post = dbinom(3, size = 6, prob = pgrid) * prior, 
+  Kristian_unstd_post = dbinom(2, 2, prob = pgrid) * prior,
+  Daina_unstd_post = dbinom(160, 198, prob = pgrid) * prior,
+  Mikkel_unstd_post = dbinom(66, 132, prob = pgrid) * prior,
+  
+  # standardize the posteriors
+  Riccardo_post = Riccardo_unstd_post/sum(Riccardo_unstd_post),
+  Kristian_post = Kristian_unstd_post/sum(Kristian_unstd_post),
+  Daina_post = Daina_unstd_post/sum(Daina_unstd_post),
+  Mikkel_post = Mikkel_unstd_post/sum(Mikkel_unstd_post)
+  ) %>% 
+  select(pgrid, prior, Riccardo_post, Kristian_post, Daina_post, Mikkel_post)
+  
+
+#### Plotting time
+
+df_all_long <- df_all %>% 
+  melt(
+    id.vars = c('pgrid', 'prior'), 
+    measure.vars = c('Riccardo_post', 'Kristian_post', 'Daina_post', 'Mikkel_post'))
+
+
+#facet_wrapped version
+ggplot(df_all_long, aes(pgrid, value)) + 
+  geom_point() + geom_line() + theme_classic() + geom_line(aes(pgrid, prior/dens, color = 'red')) + xlab('Knowledge of CogSci (pgrid) ') + ylab('Posterior probability') + facet_wrap(df_all_long$variable)
+  
+
+# a nicer version
+ggplot(df_all_long, aes(pgrid, value, colour = variable)) +
+ geom_line(size = 1) + theme_minimal() + geom_line(aes(pgrid, prior/dens), color = 'dark blue') + xlab('Proportion of correctly answered questions (pgrid) ') + ylab('Posterior probability') + labs(title = 'Knowledge of CogSci', subtitle = 'How many questions can you get right?') + 
+  theme(legend.position = 'bottom', legend.title = element_blank()) + 
+  scale_colour_hue(labels = c('Riccardo', 'Kristian', 'Daina', 'Mikkel'))
+
+```
 3. Change the prior. Given your teachers have all CogSci jobs, you should start with a higher appreciation of their knowledge: the prior is a normal distribution with a mean of 0.8 and a standard deviation of 0.2. Do the results change (and if so how)?
 3a. Produce plots of the prior and posterior for each teacher.
 
+```{r}
+################## NEW PRIOR #########################
+dens = 100
+
+df_all_2 <- tibble(
+  pgrid = seq(0, 1, length.out = dens), # making grid approximation
+  prior = dnorm(pgrid, 0.8, 0.2) # SensiblyCenteredAtChance
+  ) %>% 
+  mutate(
+    #calculating likelihood based on binomial distribution --> posterior
+  Riccardo_unstd_post = dbinom(3, size = 6, prob = pgrid) * prior, 
+  Kristian_unstd_post = dbinom(2, 2, prob = pgrid) * prior,
+  Daina_unstd_post = dbinom(160, 198, prob = pgrid) * prior,
+  Mikkel_unstd_post = dbinom(66, 132, prob = pgrid) * prior,
+  
+  # standardize the posteriors
+  Riccardo_post = Riccardo_unstd_post/sum(Riccardo_unstd_post),
+  Kristian_post = Kristian_unstd_post/sum(Kristian_unstd_post),
+  Daina_post = Daina_unstd_post/sum(Daina_unstd_post),
+  Mikkel_post = Mikkel_unstd_post/sum(Mikkel_unstd_post)
+  ) %>% 
+  select(pgrid, prior, Riccardo_post, Kristian_post, Daina_post, Mikkel_post)
+
+df_all_long_2 <- df_all_2 %>% 
+  melt(
+    id.vars = c('pgrid', 'prior'), 
+    measure.vars = c('Riccardo_post', 'Kristian_post', 'Daina_post', 'Mikkel_post'))
+
+
+# a nicer version
+ggplot(df_all_long_2, aes(pgrid, value, colour = variable)) +
+ geom_line(size = 1) + theme_minimal() + geom_line(aes(pgrid, prior/dens), color = 'dark blue') + xlab('Proportion of correctly answered questions (pgrid) ') + ylab('Posterior probability') + labs(title = 'Knowledge of CogSci', subtitle = 'How many questions can you get right?') + 
+  theme(legend.position = 'bottom', legend.title = element_blank()) + 
+  scale_colour_hue(labels = c('Riccardo', 'Kristian', 'Daina', 'Mikkel'))
+
+
+```
+
 4. You go back to your teachers and collect more data (multiply the previous numbers by 100). Calculate their knowledge with both a uniform prior and a normal prior with a mean of 0.8 and a standard deviation of 0.2. Do you still see a difference between the results? Why?
+
+```{r}
+
+```
+
 
 5. Imagine you're a skeptic and think your teachers do not know anything about CogSci, given the content of their classes. How would you operationalize that belief?
 
