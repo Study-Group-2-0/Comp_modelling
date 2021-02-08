@@ -177,13 +177,56 @@ ggplot(df_all_long_2, aes(pgrid, value, colour = variable)) +
 4. You go back to your teachers and collect more data (multiply the previous numbers by 100). Calculate their knowledge with both a uniform prior and a normal prior with a mean of 0.8 and a standard deviation of 0.2. Do you still see a difference between the results? Why?
 
 ```{r}
+########### MORE DATA ############
+dens = 100
+
+df_all_3 <- tibble(
+  pgrid = seq(0, 1, length.out = dens), # making grid approximation
+  #prior = 1
+  prior = dnorm(pgrid, 0.8, 0.2) # SensiblyCenteredAtChance
+  ) %>% 
+  mutate(
+    #calculating likelihood based on binomial distribution --> posterior
+  Riccardo_unstd_post = dbinom(30, size = 60, prob = pgrid) * prior, 
+  Kristian_unstd_post = dbinom(20, 20, prob = pgrid) * prior,
+  Daina_unstd_post = dbinom(1600, 1980, prob = pgrid) * prior,
+  Mikkel_unstd_post = dbinom(660, 1320, prob = pgrid) * prior,
+  
+  # standardize the posteriors
+  Riccardo_post = Riccardo_unstd_post/sum(Riccardo_unstd_post),
+  Kristian_post = Kristian_unstd_post/sum(Kristian_unstd_post),
+  Daina_post = Daina_unstd_post/sum(Daina_unstd_post),
+  Mikkel_post = Mikkel_unstd_post/sum(Mikkel_unstd_post)
+  ) %>% 
+  select(pgrid, prior, Riccardo_post, Kristian_post, Daina_post, Mikkel_post)
+
+df_all_long_3 <- df_all_3 %>% 
+  melt(
+    id.vars = c('pgrid', 'prior'), 
+    measure.vars = c('Riccardo_post', 'Kristian_post', 'Daina_post', 'Mikkel_post'))
+
+# a nicer version
+ggplot(df_all_long_3, aes(pgrid, value, colour = variable)) +
+ geom_line(size = 1) + theme_minimal() + geom_line(aes(pgrid, prior/dens), color = 'dark blue') + xlab('Proportion of correctly answered questions (pgrid) ') + ylab('Posterior probability') + labs(title = 'Knowledge of CogSci', subtitle = 'How many questions can you get right?') + 
+  theme(legend.position = 'bottom', legend.title = element_blank()) + 
+  scale_colour_hue(labels = c('Riccardo', 'Kristian', 'Daina', 'Mikkel'))
+
+```
+*As the amount of data increase, the 'tops' become higher and more pointy. That is, the model is more certain that a teacher will have a given posterior probability.*
+
+5. Imagine you're a skeptic and think your teachers do not know anything about CogSci, given the content of their classes. How would you operationalize that belief?
+
+```{r}
 
 ```
 
 
-5. Imagine you're a skeptic and think your teachers do not know anything about CogSci, given the content of their classes. How would you operationalize that belief?
-
 6. Optional question: Can you estimate the difference between Riccardo's estimated knowledge and that of each of the other teachers? Would you deem it credible (that is, would you believe that it is actually different)? 
+
+```{r}
+
+```
+
 
 ### Second part: Focusing on predictions
 
