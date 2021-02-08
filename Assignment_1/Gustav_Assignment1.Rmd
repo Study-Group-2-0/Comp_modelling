@@ -28,24 +28,282 @@ This is the data:
 - Daina: 160 correct answers out of 198 questions (Daina never gets bored)
 - Mikkel: 66 correct answers out of 132 questions
 
+```{r}
+############################ LOADING PACKAGES #################################
+pacman::p_load(tidyverse, rethinking, patchwork)
+```
+
+
 Questions:
 
 1. What's Riccardo's estimated knowledge of CogSci? What is the probability he knows more than chance (0.5) [try figuring this out. if you can't peek into chapters 3.1 and 3.2 and/or the slides]?
 - First implement a grid approximation (hint check paragraph 2.4.1!) with a uniform prior, calculate the posterior and plot the results
+
+```{r}
+# Making grid approximation and uniform prior
+riccardo <- tibble(
+  p_grid = seq(0,1, length.out = 20),
+  prior = 1
+) %>% 
+# Calculating the likelihood, unstd. posterior and std. posterior
+  mutate(
+    likelihood = dbinom(3, size = 6, prob = p_grid),
+    unstd_post = likelihood*prior,
+    posterior = unstd_post/sum(likelihood)
+  )
+
+# Plotting
+ggplot(riccardo, aes(p_grid, posterior))+
+  geom_line()+
+  geom_point()+
+  labs(
+    x = "Proportion of correct answers",
+    y = "Probability",
+    title = "Ricccardo's cogsci knowledge"
+  )
+  
+```
+
 - Then implement a quadratic approximation (hint check paragraph 2.4.2!).
 - N.B. for the rest of the exercise just keep using the grid approximation (we'll move to quadratic approximations in two classes)
 
+```{r}
+# Quadratic approximation
+qa <- quap(
+  alist(
+    correct ~ dbinom(correct + false, p),
+    p ~ dunif(0,1)
+  ),
+  data = list(correct = 3, false = 3)
+)
+
+precis(qa) # mean = 0.5, sd = 0.2
+
+# plotting the quadratic approximation
+curve(dnorm(x, 0.5, 0.2), lty = 2)
+```
+
+
 2. Estimate all the teachers' knowledge of CogSci. Who's best? Use grid approximation. Comment on the posteriors of Riccardo and Mikkel.
+
+```{r}
+# Making the grid and prior
+df <- tibble(
+  p_grid = seq(0, 1, length.out = 100),
+  prior = 1
+) %>% 
+# Calculating likelihood and posterior
+  mutate(
+    likelihood_Riccardo = dbinom(3, size = 6, prob = p_grid),
+    likelihood_Kristian = dbinom(2, size = 2, prob = p_grid),
+    likelihood_Daina = dbinom(160, size = 198, prob = p_grid),
+    likelihood_Mikkel = dbinom(66, size = 132, prob = p_grid),
+    across(starts_with("likelihood"), ~ .x*prior), # unstd. posterior
+    across(starts_with("likelihood"), ~ .x/sum(.x)) # std. posterior
+  ) %>% 
+  pivot_longer(
+    cols = starts_with("likelihood"),
+    names_to = "Teacher",
+    values_to = "Posterior"
+  )%>% 
+  separate(Teacher, c(NA, "Teacher"), sep = "_", convert = TRUE)
+```
+
 2a. Produce plots of the prior, and posterior for each teacher.
 
+```{r}
+# Plotting
+ggplot(df, aes(p_grid, Posterior, color = Teacher))+
+  geom_line()+
+  geom_point(size = 0.5)+
+  #geom_line(aes(y=prior))+
+  labs(x = "Proportion of Correct Answers", title = "CogSci knowledge")
+```
+
+
 3. Change the prior. Given your teachers have all CogSci jobs, you should start with a higher appreciation of their knowledge: the prior is a normal distribution with a mean of 0.8 and a standard deviation of 0.2. Do the results change (and if so how)?
+```{r}
+# Making the grid and prior
+df_qa <- tibble(
+  p_grid = seq(0, 1, length.out = 100),
+  prior = dnorm(p_grid, mean = 0.8, sd = 0.2)
+) %>% 
+# Calculating likelihood and posterior
+  mutate(
+    likelihood_Riccardo = dbinom(3, size = 6, prob = p_grid),
+    likelihood_Kristian = dbinom(2, size = 2, prob = p_grid),
+    likelihood_Daina = dbinom(160, size = 198, prob = p_grid),
+    likelihood_Mikkel = dbinom(66, size = 132, prob = p_grid),
+    across(starts_with("likelihood"), ~ .x*prior), # unstd. posterior
+    across(starts_with("likelihood"), ~ .x/sum(.x)) # std. posterior
+  ) %>% 
+  pivot_longer(
+    cols = starts_with("likelihood"),
+    names_to = "Teacher",
+    values_to = "Posterior"
+  )%>% 
+  separate(Teacher, c(NA, "Teacher"), sep = "_", convert = TRUE)
+  
+```
+
 3a. Produce plots of the prior and posterior for each teacher.
+```{r}
+# Plotting data
+plot_qa <- 
+  ggplot(df_qa, aes(p_grid, Posterior, color = Teacher))+
+  geom_line()+
+  geom_point(size = 0.5)+
+  labs(x = "Proportion of Correct Answers", y = "", title = "CogSci knowledge of teachers")
+
+# Plotting prior
+plot_prior <- 
+  ggplot(df_qa, aes(p_grid, prior))+
+  geom_line()+
+  geom_point(size = 0.5)+
+  labs(x = "Proportion of Correct Answers", y = "Probability", title = "Prior")
+
+plot_prior+plot_qa
+```
+
 
 4. You go back to your teachers and collect more data (multiply the previous numbers by 100). Calculate their knowledge with both a uniform prior and a normal prior with a mean of 0.8 and a standard deviation of 0.2. Do you still see a difference between the results? Why?
 
+```{r}
+#############################  THE UNIFORM PRIOR ############################################
+sequence_length = 1000
+
+# Making the grid and prior
+df_1 <- tibble(
+  p_grid = seq(0, 1, length.out = sequence_length),
+  prior = 1
+) %>% 
+# Calculating likelihood and posterior
+  mutate(
+    likelihood_Riccardo = dbinom(3*100, size = 6*100, prob = p_grid),
+    likelihood_Kristian = dbinom(2*100, size = 2*100, prob = p_grid),
+    likelihood_Daina = dbinom(160*100, size = 198*100, prob = p_grid),
+    likelihood_Mikkel = dbinom(66*100, size = 132*100, prob = p_grid),
+    across(starts_with("likelihood"), ~ .x*prior), # unstd. posterior
+    across(starts_with("likelihood"), ~ .x/sum(.x)) # std. posterior
+  ) %>% 
+  pivot_longer(
+    cols = starts_with("likelihood"),
+    names_to = "Teacher",
+    values_to = "Posterior"
+  )%>% 
+  separate(Teacher, c(NA, "Teacher"), sep = "_", convert = TRUE)
+```
+
+
+```{r}
+#############################  THE NORMAL PRIOR ############################################
+# Making the grid and prior
+df_qa_1 <- tibble(
+  p_grid = seq(0, 1, length.out = sequence_length),
+  prior = dnorm(p_grid, mean = 0.8, sd = 0.2)
+) %>% 
+# Calculating likelihood and posterior
+  mutate(
+    likelihood_Riccardo = dbinom(3*100, size = 6*100, prob = p_grid),
+    likelihood_Kristian = dbinom(2*100, size = 2*100, prob = p_grid),
+    likelihood_Daina = dbinom(160*100, size = 198*100, prob = p_grid),
+    likelihood_Mikkel = dbinom(66*100, size = 132*100, prob = p_grid),
+    across(starts_with("likelihood"), ~ .x*prior), # unstd. posterior
+    across(starts_with("likelihood"), ~ .x/sum(.x)) # std. posterior
+  ) %>% 
+  pivot_longer(
+    cols = starts_with("likelihood"),
+    names_to = "Teacher",
+    values_to = "Posterior"
+  )%>% 
+  separate(Teacher, c(NA, "Teacher"), sep = "_", convert = TRUE)
+```
+
+```{r}
+############################ PLOTTING WITH THE NEW OBS #################################
+# Plotting data with uniform prior
+plot_1 <- 
+  ggplot(df_1, aes(p_grid, Posterior, color = Teacher))+
+  geom_line()+
+  geom_point(size = 0.3)+
+  labs(x = "", y = "", title = "CogSci knowledge of teachers")
+
+# Plotting uniform prior
+plot_uniform_prior <- 
+  ggplot(df_1, aes(p_grid, prior))+
+  geom_line()+
+  labs(x = "", y = "Probability", title = "Prior")
+
+
+# Plotting data with normal prior
+plot_qa_1 <- 
+  ggplot(df_qa_1, aes(p_grid, Posterior, color = Teacher))+
+  geom_line()+
+  geom_point(size = 0.3)
+  labs(x = "Proportion of Correct Answers", y = "")
+
+# Plotting the normal prior
+plot_normal_prior <- 
+  ggplot(df_qa_1, aes(p_grid, prior))+
+  geom_line()+
+  labs(x = "Proportion of Correct Answers", y = "Probability")
+
+(plot_uniform_prior|plot_1) / (plot_normal_prior|plot_qa_1) +
+  plot_annotation("100 times more observations")
+```
+
+
+
 5. Imagine you're a skeptic and think your teachers do not know anything about CogSci, given the content of their classes. How would you operationalize that belief?
 
+```{r}
+#############################  THE SKEPTIC PRIOR ############################################
+# Making the grid and prior
+df_skeptic <- tibble(
+  p_grid = seq(0, 1, length.out = sequence_length),
+  prior = ifelse(p_grid <= 0.5, 
+                 max(dnorm(p_grid, mean = 0.5, sd = 0.2)), 
+                 dnorm(p_grid, mean = 0.5, sd = 0.2))
+) %>% 
+# Calculating likelihood and posterior
+  mutate(
+    likelihood_Riccardo = dbinom(3, size = 6, prob = p_grid),
+    likelihood_Kristian = dbinom(2, size = 2, prob = p_grid),
+    likelihood_Daina = dbinom(160, size = 198, prob = p_grid),
+    likelihood_Mikkel = dbinom(66, size = 132, prob = p_grid),
+    across(starts_with("likelihood"), ~ .x*prior), # unstd. posterior
+    across(starts_with("likelihood"), ~ .x/sum(.x)) # std. posterior
+  ) %>% 
+  pivot_longer(
+    cols = starts_with("likelihood"),
+    names_to = "Teacher",
+    values_to = "Posterior"
+  )%>% 
+  separate(Teacher, c(NA, "Teacher"), sep = "_", convert = TRUE)
+
+# Plotting data
+plot_skeptic <- 
+  ggplot(df_skeptic, aes(p_grid, Posterior, color = Teacher))+
+  geom_line()+
+  geom_point(size = 0.2)+
+  labs(x = "Proportion of Correct Answers", y = "", title = "CogSci knowledge of teachers")
+
+# Plotting prior
+plot_prior_skeptic <- 
+  ggplot(df_skeptic, aes(p_grid, prior))+
+  geom_line()+
+  labs(x = "Proportion of Correct Answers", y = "Probability", title = "Prior")
+
+plot_prior_skeptic+plot_skeptic
+```
+
+
 6. Optional question: Can you estimate the difference between Riccardo's estimated knowledge and that of each of the other teachers? Would you deem it credible (that is, would you believe that it is actually different)? 
+
+```{r}
+# T-test perhaps? ?
+```
+
 
 ### Second part: Focusing on predictions
 
