@@ -58,9 +58,12 @@ bayesian_ric <- tibble(
 ggplot(bayesian_ric, aes(pgrid, posterior)) +
   geom_point() + geom_line() + theme_classic() + geom_line(aes(pgrid, prior/dens, color = 'red')) + xlab('Knowledge of CogSci (pgrid) ') + ylab('Posterior probability')
 
+
 # The probability that he knows more than by chance is ..
 bayesian_ric_50 <- filter(bayesian_ric, bayesian_ric$pgrid > 0.5)
 sum(bayesian_ric_50$posterior)
+
+mean(bayesian_ric$pgrid > 0.5)
 
 # det kunne jeg have sagt mig selv. 50% sandsynlighed..
   
@@ -128,7 +131,10 @@ ggplot(df_all_long, aes(pgrid, value)) +
 
 # a nicer version
 ggplot(df_all_long, aes(pgrid, value, colour = variable)) +
- geom_line(size = 1) + theme_minimal() + geom_line(aes(pgrid, prior/dens), color = 'dark blue') + xlab('Proportion of correctly answered questions (pgrid) ') + ylab('Posterior probability') + labs(title = 'Knowledge of CogSci', subtitle = 'How many questions can you get right?') + 
+ geom_line(size = 1) + theme_minimal() + geom_line(aes(pgrid, prior/dens), color = 'dark blue') + 
+  xlab('Proportion of correctly answered questions (pgrid) ') + 
+  ylab('Posterior probability') + 
+  labs(title = 'Knowledge of CogSci', subtitle = 'How many questions can you get right?') + 
   theme(legend.position = 'bottom', legend.title = element_blank()) + 
   scale_colour_hue(labels = c('Riccardo', 'Kristian', 'Daina', 'Mikkel'))
 
@@ -167,7 +173,10 @@ df_all_long_2 <- df_all_2 %>%
 
 # a nicer version
 ggplot(df_all_long_2, aes(pgrid, value, colour = variable)) +
- geom_line(size = 1) + theme_minimal() + geom_line(aes(pgrid, prior/dens), color = 'dark blue') + xlab('Proportion of correctly answered questions (pgrid) ') + ylab('Posterior probability') + labs(title = 'Knowledge of CogSci', subtitle = 'How many questions can you get right?') + 
+ geom_line(size = 1) + theme_minimal() + geom_line(aes(pgrid, prior/dens), color = 'dark blue') +
+  xlab('Proportion of correctly answered questions (pgrid) ') + 
+  ylab('Posterior probability') + 
+  labs(title = 'Knowledge of CogSci', subtitle = 'How many questions can you get right?') + 
   theme(legend.position = 'bottom', legend.title = element_blank()) + 
   scale_colour_hue(labels = c('Riccardo', 'Kristian', 'Daina', 'Mikkel'))
 
@@ -207,7 +216,10 @@ df_all_long_3 <- df_all_3 %>%
 
 # a nicer version
 ggplot(df_all_long_3, aes(pgrid, value, colour = variable)) +
- geom_line(size = 1) + theme_minimal() + geom_line(aes(pgrid, prior/dens), color = 'dark blue') + xlab('Proportion of correctly answered questions (pgrid) ') + ylab('Posterior probability') + labs(title = 'Knowledge of CogSci', subtitle = 'How many questions can you get right?') + 
+ geom_line(size = 1) + theme_minimal() + geom_line(aes(pgrid, prior/dens), color = 'dark blue') + 
+  xlab('Proportion of correctly answered questions (pgrid) ') + 
+  ylab('Posterior probability') + 
+  labs(title = 'Knowledge of CogSci', subtitle = 'How many questions can you get right?') + 
   theme(legend.position = 'bottom', legend.title = element_blank()) + 
   scale_colour_hue(labels = c('Riccardo', 'Kristian', 'Daina', 'Mikkel'))
 
@@ -215,16 +227,55 @@ ggplot(df_all_long_3, aes(pgrid, value, colour = variable)) +
 *As the amount of data increase, the 'tops' become higher and more pointy. That is, the model is more certain that a teacher will have a given posterior probability.*
 
 5. Imagine you're a skeptic and think your teachers do not know anything about CogSci, given the content of their classes. How would you operationalize that belief?
+*choosing a low prior?*
 
 ```{r}
+dens = 100
 
+df_all_4 <- tibble(
+  pgrid = seq(0, 1, length.out = dens), # making grid approximation
+  #prior = dnorm(pgrid, 0.2, 0.05) # low prior
+  #prior = ifelse(pgrid < 0.5, 0, 1) # nothing below chance?
+  ) %>% 
+  mutate(
+    #calculating likelihood based on binomial distribution --> posterior
+  Riccardo_unstd_post = dbinom(30, size = 60, prob = pgrid) * prior, 
+  Kristian_unstd_post = dbinom(20, 20, prob = pgrid) * prior,
+  Daina_unstd_post = dbinom(1600, 1980, prob = pgrid) * prior,
+  Mikkel_unstd_post = dbinom(660, 1320, prob = pgrid) * prior,
+  
+  # standardize the posteriors
+  Riccardo_post = Riccardo_unstd_post/sum(Riccardo_unstd_post),
+  Kristian_post = Kristian_unstd_post/sum(Kristian_unstd_post),
+  Daina_post = Daina_unstd_post/sum(Daina_unstd_post),
+  Mikkel_post = Mikkel_unstd_post/sum(Mikkel_unstd_post)
+  ) %>% 
+  select(pgrid, prior, Riccardo_post, Kristian_post, Daina_post, Mikkel_post)
+
+df_all_long_4 <- df_all_4 %>% 
+  melt(
+    id.vars = c('pgrid', 'prior'), 
+    measure.vars = c('Riccardo_post', 'Kristian_post', 'Daina_post', 'Mikkel_post'))
+
+# a nicer version
+ggplot(df_all_long_4, aes(pgrid, value, colour = variable)) +
+ geom_line(size = 1) + theme_minimal() + geom_line(aes(pgrid, prior/dens), color = 'dark blue') + 
+  xlab('Proportion of correctly answered questions (pgrid) ') + 
+  ylab('Posterior probability') + 
+  labs(title = 'Knowledge of CogSci', subtitle = 'How many questions can you get right?') + 
+  theme(legend.position = 'bottom', legend.title = element_blank()) + 
+  scale_colour_hue(labels = c('Riccardo', 'Kristian', 'Daina', 'Mikkel'))
 ```
-
 
 6. Optional question: Can you estimate the difference between Riccardo's estimated knowledge and that of each of the other teachers? Would you deem it credible (that is, would you believe that it is actually different)? 
 
 ```{r}
+sum(HPDI(df_all_2$pgrid, prob = df_all_2$Riccardo_post)) # not correct
+mean(df_all_2$Kristian_post)
+mean(df_all_2$Daina_post)
+mean(df_all_2$Mikkel_post)
 
+# above is not correct
 ```
 
 
