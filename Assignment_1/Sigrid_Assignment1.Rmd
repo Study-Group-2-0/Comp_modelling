@@ -60,12 +60,9 @@ ggplot(bayesian_ric, aes(pgrid, posterior)) +
 
 
 # The probability that he knows more than by chance is ..
-bayesian_ric_50 <- filter(bayesian_ric, bayesian_ric$pgrid > 0.5)
-sum(bayesian_ric_50$posterior)
-
 mean(bayesian_ric$pgrid > 0.5)
 
-# det kunne jeg have sagt mig selv. 50% sandsynlighed..
+#50% sandsynlighed..
   
 ```
 The probability that he knows more than by chance is 50% (because he answered 3 out of 6 questions correctly)
@@ -139,6 +136,10 @@ ggplot(df_all_long, aes(pgrid, value, colour = variable)) +
   scale_colour_hue(labels = c('Riccardo', 'Kristian', 'Daina', 'Mikkel'))
 
 ```
+Mikkel's posterior: Lower SD and more 'pointy' distribution.
+Riccardo's posterior: Higher SD and less pointy distribution.
+We think it is because Mikkel has answered many more questions than Riccardo (132 v. 6). More data equals more certainty about the underlying knowledge/parameter. 
+
 3. Change the prior. Given your teachers have all CogSci jobs, you should start with a higher appreciation of their knowledge: the prior is a normal distribution with a mean of 0.8 and a standard deviation of 0.2. Do the results change (and if so how)?
 3a. Produce plots of the prior and posterior for each teacher.
 
@@ -172,7 +173,7 @@ df_all_long_2 <- df_all_2 %>%
 
 
 # a nicer version
-ggplot(df_all_long_2, aes(pgrid, value, colour = variable)) +
+g <- ggplot(df_all_long_2, aes(pgrid, value, colour = variable)) +
  geom_line(size = 1) + theme_minimal() + geom_line(aes(pgrid, prior/dens), color = 'dark blue') +
   xlab('Proportion of correctly answered questions (pgrid) ') + 
   ylab('Posterior probability') + 
@@ -182,6 +183,13 @@ ggplot(df_all_long_2, aes(pgrid, value, colour = variable)) +
 
 
 ```
+How do the results change:
+- (ofc) prior is no longer flat
+- biggest difference in Riccardo and Kristian's posterior distribution (lower SD)
+- the posterior distr. of all the teachers have moved closer to 1.
+- the distributions with the least data have changed the most (Ric and Kris)
+- question: 'toppunkt' --> mere pointy, more narrow distribution
+- it is possible that all of the distributions have become more narrow, but the distributions with the least data are the ones where the change is most visible. 
 
 4. You go back to your teachers and collect more data (multiply the previous numbers by 100). Calculate their knowledge with both a uniform prior and a normal prior with a mean of 0.8 and a standard deviation of 0.2. Do you still see a difference between the results? Why?
 
@@ -196,10 +204,10 @@ df_all_3 <- tibble(
   ) %>% 
   mutate(
     #calculating likelihood based on binomial distribution --> posterior
-  Riccardo_unstd_post = dbinom(30, size = 60, prob = pgrid) * prior, 
-  Kristian_unstd_post = dbinom(20, 20, prob = pgrid) * prior,
-  Daina_unstd_post = dbinom(1600, 1980, prob = pgrid) * prior,
-  Mikkel_unstd_post = dbinom(660, 1320, prob = pgrid) * prior,
+  Riccardo_unstd_post = dbinom(300, size = 600, prob = pgrid) * prior, 
+  Kristian_unstd_post = dbinom(200, 200, prob = pgrid) * prior,
+  Daina_unstd_post = dbinom(16000, 19800, prob = pgrid) * prior,
+  Mikkel_unstd_post = dbinom(6600, 13200, prob = pgrid) * prior,
   
   # standardize the posteriors
   Riccardo_post = Riccardo_unstd_post/sum(Riccardo_unstd_post),
@@ -224,7 +232,7 @@ ggplot(df_all_long_3, aes(pgrid, value, colour = variable)) +
   scale_colour_hue(labels = c('Riccardo', 'Kristian', 'Daina', 'Mikkel'))
 
 ```
-*As the amount of data increase, the 'tops' become higher and more pointy. That is, the model is more certain that a teacher will have a given posterior probability.*
+*As the amount of data increase, the 'tops' become higher and more pointy. That is, the model is more certain that a teacher will have a given parameter distribution. More narrow distributions. The prior does not have a great effect on the differents distributions, but there is a small difference between using the uniform flat prior and the normally distributed prior.*
 
 5. Imagine you're a skeptic and think your teachers do not know anything about CogSci, given the content of their classes. How would you operationalize that belief?
 *choosing a low prior?*
@@ -234,8 +242,8 @@ dens = 100
 
 df_all_4 <- tibble(
   pgrid = seq(0, 1, length.out = dens), # making grid approximation
-  #prior = dnorm(pgrid, 0.2, 0.05) # low prior
-  #prior = ifelse(pgrid < 0.5, 0, 1) # nothing below chance?
+  #prior = dnorm(pgrid, 0.2, 005) # low prior
+  prior = ifelse(pgrid < 0.5, 0, 1) # nothing below chance?
   ) %>% 
   mutate(
     #calculating likelihood based on binomial distribution --> posterior
@@ -270,14 +278,11 @@ ggplot(df_all_long_4, aes(pgrid, value, colour = variable)) +
 6. Optional question: Can you estimate the difference between Riccardo's estimated knowledge and that of each of the other teachers? Would you deem it credible (that is, would you believe that it is actually different)? 
 
 ```{r}
-sum(HPDI(df_all_2$pgrid, prob = df_all_2$Riccardo_post)) # not correct
-mean(df_all_2$Kristian_post)
-mean(df_all_2$Daina_post)
-mean(df_all_2$Mikkel_post)
+#using the this distribution
+g
 
-# above is not correct
 ```
-
+When eye-balling the data, it looks like it is difficult to tell whether Riccardo's estimated knowledge is different from that of the other teachers, since Ric's distribution overlaps all of the other distributions. Based on this, we wouldn't believe that Riccardo's estimated knowledge is different from the other teachers. 
 
 ### Second part: Focusing on predictions
 
