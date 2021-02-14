@@ -73,8 +73,8 @@ ggplot(riccardo, aes(p_grid, posterior))+
 # Quadratic approximation
 qa <- quap(
   alist(
-    correct ~ dbinom(correct + false, p),
-    p ~ dunif(0,1)
+    correct ~ dbinom(correct + false, p), # likelihood
+    p ~ dunif(0,1) # uniform prior
   ),
   data = list(correct = 3, false = 3)
 )
@@ -268,8 +268,8 @@ plot_normal_prior <-
 df_skeptic <- tibble(
   p_grid = seq(0, 1, length.out = sequence_length),
   prior = ifelse(p_grid <= 0.5, 
-                 max(dnorm(p_grid, mean = 0.5, sd = 0.2)), 
-                 dnorm(p_grid, mean = 0.5, sd = 0.2))
+                max(dnorm(p_grid, mean = 0.5, sd = 0.2)), 
+                dnorm(p_grid, mean = 0.5, sd = 0.2))
 ) %>% 
 # Calculating likelihood and posterior
   mutate(

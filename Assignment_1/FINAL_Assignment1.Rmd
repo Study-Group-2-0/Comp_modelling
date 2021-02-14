@@ -30,22 +30,345 @@ This is the data:
 
 Questions:
 
+```{r}
+############################ LOADING PACKAGES #################################
+pacman::p_load(tidyverse, rethinking, patchwork)
+```
+
+
 1. What's Riccardo's estimated knowledge of CogSci? What is the probability he knows more than chance (0.5) [try figuring this out. if you can't peek into chapters 3.1 and 3.2 and/or the slides]?
 - First implement a grid approximation (hint check paragraph 2.4.1!) with a uniform prior, calculate the posterior and plot the results
+
+```{r}
+############################ THE RICCARDO KNOWLEDGE #################################
+# Number of grid points
+dens = 20
+
+# Making grid approximation and uniform prior
+riccardo <- tibble(
+  p_grid = seq(0,1, length.out = dens), # Defining grid
+  prior = dunif(1) # Making a uniform prior
+) %>% 
+# Calculating the likelihood, unstd. posterior and std. posterior
+  mutate(
+    likelihood = dbinom(3, size = 6, prob = p_grid),
+    unstd_post = likelihood*prior, # unstd. posterior
+    posterior = unstd_post/sum(unstd_post) # std. posterior
+  )
+
+# PLOTTING 
+ggplot(riccardo, aes(p_grid, posterior)) +
+  geom_point() + geom_line() +  
+  geom_line(aes(p_grid, prior/dens, color = 'red')) + 
+  xlab('Knowledge of CogSci (p_grid) ') +
+  ylab('Posterior probability') +
+  theme_classic() 
+
+
+# The probability that Riccardo knows more than chance
+mean(riccardo$p_grid > 0.5)
+
+# There is a 50 % probability that Riccardo knows more than chance.
+```
+
 - Then implement a quadratic approximation (hint check paragraph 2.4.2!).
+```{r}
+############################ RICCARDO WITH QUADRATIC APPROXIMATION ##############################
+# Quadratic approximation
+qa <- quap(
+  alist(
+    correct ~ dbinom(correct + false, p), # likelihood
+    p ~ dunif(0,1) # uniform prior
+  ),
+  data = list(correct = 3, false = 3)
+)
+
+precis(qa) # mean = 0.5, sd = 0.2
+
+# plotting the quadratic approximation
+curve(dnorm(x, 0.5, 0.2), lty = 2)
+
+```
+
 - N.B. for the rest of the exercise just keep using the grid approximation (we'll move to quadratic approximations in two classes)
+
 
 2. Estimate all the teachers' knowledge of CogSci. Who's best? Use grid approximation. Comment on the posteriors of Riccardo and Mikkel.
 2a. Produce plots of the prior, and posterior for each teacher.
+```{r}
+############################ ALL THE TEACHERS KNOWLEDGE #################################
+dens = 100
+
+# Making the grid and prior
+df <- tibble(
+  p_grid = seq(0, 1, length.out = dens),
+  prior = 1
+) %>% 
+# Calculating likelihood and posterior
+  mutate(
+    likelihood_Riccardo = dbinom(3, size = 6, prob = p_grid),
+    likelihood_Kristian = dbinom(2, size = 2, prob = p_grid),
+    likelihood_Daina = dbinom(160, size = 198, prob = p_grid),
+    likelihood_Mikkel = dbinom(66, size = 132, prob = p_grid),
+    across(starts_with("likelihood"), ~ .x*prior), # unstd. posterior
+    across(starts_with("likelihood"), ~ .x/sum(.x)) # std. posterior
+  ) %>% 
+  pivot_longer(
+    cols = starts_with("likelihood"),
+    names_to = "Teacher",
+    values_to = "Posterior"
+  ) %>% 
+  separate(Teacher, c(NA, "Teacher"), sep = "_", convert = TRUE) # Removing likelihood from the factor names
+
+# PLOTTING
+ggplot(df) +
+  aes(p_grid, Posterior, colour = Teacher)+
+  geom_line() +
+  geom_point(size = 0.5) + 
+  geom_line(aes(p_grid, prior/dens), color = 'dark blue', size = 1) +  # Prior line
+  labs(x = 'Proportion of correctly answered questions (pgrid) ', 
+       y = 'Posterior probability', 
+       title = 'Knowledge of CogSci') + 
+  theme_minimal()+
+  theme(legend.position = 'bottom')
+```
 
 3. Change the prior. Given your teachers have all CogSci jobs, you should start with a higher appreciation of their knowledge: the prior is a normal distribution with a mean of 0.8 and a standard deviation of 0.2. Do the results change (and if so how)?
 3a. Produce plots of the prior and posterior for each teacher.
+```{r}
+############################ ALL TEACHERS WITH NORMAL PRIOR #################################
+dens = 100
+
+# Making the grid and prior
+df_normal <- tibble(
+  p_grid = seq(0, 1, length.out = dens),
+  prior = dnorm(p_grid, mean = 0.8, sd = 0.2)
+) %>% 
+# Calculating likelihood and posterior
+  mutate(
+    likelihood_Riccardo = dbinom(3, size = 6, prob = p_grid),
+    likelihood_Kristian = dbinom(2, size = 2, prob = p_grid),
+    likelihood_Daina = dbinom(160, size = 198, prob = p_grid),
+    likelihood_Mikkel = dbinom(66, size = 132, prob = p_grid),
+    across(starts_with("likelihood"), ~ .x*prior), # unstd. posterior
+    across(starts_with("likelihood"), ~ .x/sum(.x)) # std. posterior
+  ) %>% 
+  pivot_longer(
+    cols = starts_with("likelihood"),
+    names_to = "Teacher",
+    values_to = "Posterior"
+  )%>% 
+  separate(Teacher, c(NA, "Teacher"), sep = "_", convert = TRUE)
+
+
+# PLOTTING
+ggplot(df_normal) +
+  aes(p_grid, Posterior, colour = Teacher)+
+  geom_line() +
+  geom_point(size = 0.5) + 
+  geom_line(aes(p_grid, prior/dens), color = 'dark blue', size = 1) +  # Prior line
+  labs(x = 'Proportion of correctly answered questions (pgrid) ', 
+       y = 'Posterior probability', 
+       title = 'Knowledge of CogSci') + 
+  theme_minimal()+
+  theme(legend.position = 'bottom')
+
+```
+How do the results change:
+- (ofc) prior is no longer flat
+- biggest difference in Riccardo and Kristian's posterior distribution (lower SD)
+- the posterior distr. of all the teachers have moved closer to 1.
+- the distributions with the least data have changed the most (Ric and Kris)
+- question: 'toppunkt' --> mere pointy, more narrow distribution
+- it is possible that all of the distributions have become more narrow, but the distributions with the least data are the ones where the change is most visible. 
+
 
 4. You go back to your teachers and collect more data (multiply the previous numbers by 100). Calculate their knowledge with both a uniform prior and a normal prior with a mean of 0.8 and a standard deviation of 0.2. Do you still see a difference between the results? Why?
+```{r}
+#############################  THE UNIFORM PRIOR * 100 OBS #######################################
+dens = 100
+
+# Making the grid and prior
+df_uniform <- tibble(
+  p_grid = seq(0, 1, length.out = dens),
+  prior = 1
+) %>% 
+# Calculating likelihood and posterior
+  mutate(
+    likelihood_Riccardo = dbinom(3*100, size = 6*100, prob = p_grid),
+    likelihood_Kristian = dbinom(2*100, size = 2*100, prob = p_grid),
+    likelihood_Daina = dbinom(160*100, size = 198*100, prob = p_grid),
+    likelihood_Mikkel = dbinom(66*100, size = 132*100, prob = p_grid),
+    across(starts_with("likelihood"), ~ .x*prior), # unstd. posterior
+    across(starts_with("likelihood"), ~ .x/sum(.x)) # std. posterior
+  ) %>% 
+  pivot_longer(
+    cols = starts_with("likelihood"),
+    names_to = "Teacher",
+    values_to = "Posterior"
+  )%>% 
+  separate(Teacher, c(NA, "Teacher"), sep = "_", convert = TRUE)
+
+```
+
+```{r}
+#############################  THE NORMAL PRIOR * 100 OBS #################################
+# Making the grid and prior
+df_normal <- tibble(
+  p_grid = seq(0, 1, length.out = dens),
+  prior = dnorm(p_grid, mean = 0.8, sd = 0.2)
+) %>% 
+# Calculating likelihood and posterior
+  mutate(
+    likelihood_Riccardo = dbinom(3*100, size = 6*100, prob = p_grid),
+    likelihood_Kristian = dbinom(2*100, size = 2*100, prob = p_grid),
+    likelihood_Daina = dbinom(160*100, size = 198*100, prob = p_grid),
+    likelihood_Mikkel = dbinom(66*100, size = 132*100, prob = p_grid),
+    across(starts_with("likelihood"), ~ .x*prior), # unstd. posterior
+    across(starts_with("likelihood"), ~ .x/sum(.x)) # std. posterior
+  ) %>% 
+  pivot_longer(
+    cols = starts_with("likelihood"),
+    names_to = "Teacher",
+    values_to = "Posterior"
+  )%>% 
+  separate(Teacher, c(NA, "Teacher"), sep = "_", convert = TRUE)
+```
+
+```{r}
+############################ PLOTTING #######################################
+# Uniform prior 
+plot_uniform <- ggplot(df_uniform) +
+  aes(p_grid, Posterior, colour = Teacher)+
+  geom_line() +
+  geom_point(size = 0.5) + 
+  geom_line(aes(p_grid, prior/dens), color = 'dark blue', size = 1) +  # Prior line
+  labs(x = 'Proportion of correctly answered questions (pgrid) ', 
+       y = 'Posterior probability', 
+       title = 'Knowledge of CogSci - Uniform Prior') + 
+  theme_minimal()+
+  theme(legend.position = 'bottom')
+  
+  
+  
+# Normal prior
+plot_normal <- ggplot(df_normal) +
+  aes(p_grid, Posterior, colour = Teacher)+
+  geom_line() +
+  geom_point(size = 0.5) + 
+  geom_line(aes(p_grid, prior/dens), color = 'dark blue', size = 1) +  # Prior line
+  labs(x = 'Proportion of correctly answered questions (pgrid) ', 
+       y = 'Posterior probability', 
+       title = 'Knowledge of CogSci - Normal Prior') + 
+  theme_minimal()+
+  theme(legend.position = 'bottom')
+
+plot_normal 
+plot_uniform
+```
+*As the amount of data increase, the 'tops' become higher and more pointy. That is, the model is more certain that a teacher will have a given parameter distribution. More narrow distributions. The prior does not have a great effect on the differents distributions, but there is a small difference between using the uniform flat prior and the normally distributed prior.*
 
 5. Imagine you're a skeptic and think your teachers do not know anything about CogSci, given the content of their classes. How would you operationalize that belief?
+```{r}
+#############################  THE SKEPTIC PRIOR ############################################
+dens = 100
+
+# Making the grid and prior
+df_skeptic <- tibble(
+  p_grid = seq(0, 1, length.out = dens),
+  prior = ifelse(p_grid <= 0.5, 
+                max(dnorm(p_grid, mean = 0.5, sd = 0.2)), 
+                dnorm(p_grid, mean = 0.5, sd = 0.2))
+) %>% 
+# Calculating likelihood and posterior
+  mutate(
+    likelihood_Riccardo = dbinom(3, size = 6, prob = p_grid),
+    likelihood_Kristian = dbinom(2, size = 2, prob = p_grid),
+    likelihood_Daina = dbinom(160, size = 198, prob = p_grid),
+    likelihood_Mikkel = dbinom(66, size = 132, prob = p_grid),
+    across(starts_with("likelihood"), ~ .x*prior), # unstd. posterior
+    across(starts_with("likelihood"), ~ .x/sum(.x)) # std. posterior
+  ) %>% 
+  pivot_longer(
+    cols = starts_with("likelihood"),
+    names_to = "Teacher",
+    values_to = "Posterior"
+  )%>% 
+  separate(Teacher, c(NA, "Teacher"), sep = "_", convert = TRUE)
+
+# PLOTTING
+ggplot(df_skeptic) +
+  aes(p_grid, Posterior, colour = Teacher)+
+  geom_line() +
+  geom_point(size = 0.5) + 
+  geom_line(aes(p_grid, prior/dens), color = 'dark blue', size = 1) +  # Prior line
+  labs(x = 'Proportion of correctly answered questions (pgrid) ', 
+       y = 'Posterior probability', 
+       title = 'Knowledge of CogSci - Skeptic Prior') + 
+  theme_minimal()+
+  theme(legend.position = 'bottom')
+
+```
+
+
 
 6. Optional question: Can you estimate the difference between Riccardo's estimated knowledge and that of each of the other teachers? Would you deem it credible (that is, would you believe that it is actually different)? 
+
+```{r}
+####################### DIFFERENCE BETWEEN RICCARDO AND OTHER TEACHERS ###################
+
+# Setting seed so the sampling can be replicated
+set.seed(123)
+
+# Defining the distribution for each teacher
+dens = 100
+
+# Making the grid and prior
+df <- tibble(
+  p_grid = seq(0, 1, length.out = dens),
+  prior = dnorm(p_grid, mean = 0.8, sd = 0.2)
+) %>% 
+# Calculating likelihood and posterior
+  mutate(
+    likelihood_Riccardo = dbinom(3, size = 6, prob = p_grid),
+    likelihood_Kristian = dbinom(2, size = 2, prob = p_grid),
+    likelihood_Daina = dbinom(160, size = 198, prob = p_grid),
+    likelihood_Mikkel = dbinom(66, size = 132, prob = p_grid),
+    across(starts_with("likelihood"), ~ .x*prior), # unstd. posterior
+    across(starts_with("likelihood"), ~ .x/sum(.x)) # std. posterior
+  ) 
+
+# Sampling from each teachers distribution
+sampling_size = 1000
+samples <- tibble(
+  Index = seq(1, sampling_size),
+  Riccardo = sample(df$p_grid, size = sampling_size, prob = df$likelihood_Riccardo ,replace = T),
+  Kristian = sample(df$p_grid, size = sampling_size, prob = df$likelihood_Kristian ,replace = T),
+  Daina = sample(df$p_grid, size = sampling_size, prob = df$likelihood_Daina ,replace = T),
+  Mikkel = sample(df$p_grid, size = sampling_size, prob = df$likelihood_Mikkel ,replace = T)
+)  %>%
+  pivot_longer(cols = -c(Index),
+               names_to = "Teacher",
+               values_to = "Samples")
+ 
+# Plotting 
+ggplot(samples)+
+  aes(x = Samples, fill = Teacher)+
+  geom_density()+
+  labs(x = "P Grid", title = "Density Plot of Samples")+
+  theme_minimal()
+
+# Releveling the factor and doing a lm
+samples <- samples %>% 
+  mutate(Teacher = as.factor(Teacher),
+         Teacher = fct_relevel(Teacher, "Riccardo")) 
+
+# lm
+lm(Samples ~ Teacher, data = samples) %>% 
+  summary
+
+```
+
 
 ### Second part: Focusing on predictions
 
