@@ -30,7 +30,7 @@ This is the data:
 
 ```{r}
 ############################ LOADING PACKAGES #################################
-pacman::p_load(tidyverse, rethinking, patchwork)
+pacman::p_load(tidyverse, rethinking, patchwork, reshape2)
 ```
 
 
@@ -307,7 +307,63 @@ plot_prior_skeptic+plot_skeptic
 6. Optional question: Can you estimate the difference between Riccardo's estimated knowledge and that of each of the other teachers? Would you deem it credible (that is, would you believe that it is actually different)? 
 
 ```{r}
-# T-test perhaps? ?
+####################### DIFFERENCE BETWEEN RICCARDO AND OTHER TEACHERS ###################
+
+# Setting seed so the sampling can be replicated
+set.seed(123)
+
+# Defining the distribution for each teacher
+dens = 100
+
+# Making the grid and prior
+df <- tibble(
+  p_grid = seq(0, 1, length.out = dens),
+  prior = dnorm(p_grid, mean = 0.8, sd = 0.2)
+) %>% 
+# Calculating likelihood and posterior
+  mutate(
+    likelihood_Riccardo = dbinom(3, size = 6, prob = p_grid),
+    likelihood_Kristian = dbinom(2, size = 2, prob = p_grid),
+    likelihood_Daina = dbinom(160, size = 198, prob = p_grid),
+    likelihood_Mikkel = dbinom(66, size = 132, prob = p_grid),
+    across(starts_with("likelihood"), ~ .x*prior), # unstd. posterior
+    across(starts_with("likelihood"), ~ .x/sum(.x)) # std. posterior
+  ) %>% 
+  rename(
+    posterior_Riccardo = likelihood_Riccardo,
+    posterior_Kristian = likelihood_Kristian,
+    posterior_Daina = likelihood_Daina,
+    posterior_Mikkel = likelihood_Mikkel
+  )
+
+# Sampling from each teachers distribution
+sampling_size = 1000
+samples <- tibble(
+  Index = seq(1, sampling_size),
+  Riccardo = sample(df$p_grid, size = sampling_size, prob = df$posterior_Riccardo ,replace = T),
+  Kristian = sample(df$p_grid, size = sampling_size, prob = df$posterior_Kristian ,replace = T),
+  Daina = sample(df$p_grid, size = sampling_size, prob = df$posterior_Daina ,replace = T),
+  Mikkel = sample(df$p_grid, size = sampling_size, prob = df$posterior_Mikkel ,replace = T)
+)  %>%
+  pivot_longer(cols = -c(Index),
+               names_to = "Teacher",
+               values_to = "Samples")
+ 
+# Plotting 
+ggplot(samples)+
+  aes(x = Samples, fill = Teacher)+
+  geom_density()+
+  labs(x = "P Grid", title = "Density Plot of Samples")+
+  theme_minimal()
+
+# Releveling the factor and doing a lm
+samples <- samples %>% 
+  mutate(Teacher = as.factor(Teacher),
+         Teacher = fct_relevel(Teacher, "Riccardo")) 
+
+# lm
+lm(Samples ~ Teacher, data = samples) %>% 
+  summary
 ```
 
 
@@ -336,4 +392,319 @@ Guidance Tips
 1. There are at least two ways of assessing predictions.
 2. Last year's results are this year's expectations.
 3. Are the parameter estimates changing? (way 1)
+```{r}
+#########################            ##############
+# Length of grid
+sequence_length = 100
+
+# Making the grid and priors of last years posterior distributions.
+df_new <- tibble(
+  p_grid = seq(0, 1, length.out = sequence_length),
+  prior_Riccardo = df$posterior_Riccardo,
+  prior_Kristian = df$posterior_Kristian,
+  prior_Daina = df$posterior_Daina,
+  prior_Mikkel = df$posterior_Mikkel
+) %>% 
+# Calculating likelihood and posterior
+  mutate(
+    likelihood_Riccardo = dbinom(9, size = 10, prob = p_grid),
+    likelihood_Kristian = dbinom(8, size = 12, prob = p_grid),
+    likelihood_Daina = dbinom(148, size = 172, prob = p_grid),
+    likelihood_Mikkel = dbinom(34, size = 65, prob = p_grid),
+# Standardizing
+    likelihood_Riccardo = (likelihood_Riccardo*prior_Riccardo)/sum(likelihood_Riccardo*prior_Riccardo),
+    likelihood_Kristian = (likelihood_Kristian*prior_Kristian)/sum(likelihood_Kristian*prior_Kristian),
+    likelihood_Daina = (likelihood_Daina*prior_Daina)/sum(likelihood_Daina*prior_Daina),
+    likelihood_Mikkel = (likelihood_Mikkel*prior_Mikkel)/sum(likelihood_Mikkel*prior_Mikkel)
+  ) 
+
+# Making a new data_frame with only priors
+df_prior <- df_new %>% 
+  select(p_grid,starts_with("prior")) %>% 
+  pivot_longer(
+    cols = starts_with("prior"),
+    names_to = "Teacher",
+    values_to = "Prior"
+  )%>% 
+  separate(Teacher, c(NA, "Teacher"), sep = "_", convert = TRUE)
+  
+# Making a new data_frame with only posteriors
+df_post <- df_new %>% 
+  select(p_grid, starts_with("likelihood")) %>% 
+  pivot_longer(
+    cols = starts_with("likelihood"),
+    names_to = "Teacher",
+    values_to = "Posterior"
+  )%>% 
+  separate(Teacher, c(NA, "Teacher"), sep = "_", convert = TRUE)
+
+# Merging
+df_1 <- merge(df_post, df_prior)
+
+```
+
+
+```{r}
+######################## PLOTTING ##############################
+plot_prior <- 
+  ggplot(df_1, aes(p_grid, Prior, color = Teacher))+
+  geom_line()+
+  geom_point(size = 0.2)+
+  labs(x = "Proportion of Correct Answers", y = "", title = "Prior distributions")
+
+plot_post <- 
+  ggplot(df_1, aes(p_grid, Posterior, color = Teacher))+
+  geom_line()+
+  geom_point(size = 0.2)+
+  labs(x = "Proportion of Correct Answers", y = "", title = "Posterior distributions")
+
+plot_prior + plot_post
+```
+
+
+```{r}
+######################## TESTING AGAINST ACCUMULATED DATA ###############################
+dens = 100
+
+# Making the grid and prior
+df_normal <- tibble(
+  p_grid = seq(0, 1, length.out = dens),
+  prior = dnorm(p_grid, mean = 0.8, sd = 0.2)
+) %>% 
+# Calculating likelihood and posterior
+  mutate(
+    likelihood_Riccardo = dbinom(12, size = 16, prob = p_grid),
+    likelihood_Kristian = dbinom(10, size = 14, prob = p_grid),
+    likelihood_Daina = dbinom(308, size = 370, prob = p_grid),
+    likelihood_Mikkel = dbinom(100, size = 197, prob = p_grid),
+    across(starts_with("likelihood"), ~ .x*prior), # unstd. posterior
+    across(starts_with("likelihood"), ~ .x/sum(.x)) # std. posterior
+  ) %>% 
+  pivot_longer(
+    cols = starts_with("likelihood"),
+    names_to = "Teacher",
+    values_to = "Posterior"
+  )%>% 
+  separate(Teacher, c(NA, "Teacher"), sep = "_", convert = TRUE)
+
+
+# PLOTTING
+plot_control <- ggplot(df_normal) +
+  aes(p_grid, Posterior, colour = Teacher)+
+  geom_line() +
+  geom_point(size = 0.5) + 
+  #geom_line(aes(p_grid, prior/dens), color = 'dark blue', size = 1) +  # Prior line
+  labs(x = 'Proportion of correctly answered questions (pgrid) ', 
+       y = 'Posterior probability', 
+       title = 'Knowledge of CogSci') + 
+  theme_minimal()+
+  theme(legend.position = 'bottom')
+
+plot_control + plot_post
+```
+
+```{r}
+##################### CHECKING DISTRIBUTION PARAMETERS - AWKWARD #######################
+# sample_size
+sample_size = 1000
+
+# Creating a data_frame with samples from all the teachers
+samples <- tibble(
+  # Samples from prior distribution
+  prior_Riccardo = sample(df$p_grid, prob = df_new$prior_Riccardo, size = sample_size, replace = T),
+  prior_Kristian = sample(df$p_grid, prob = df_new$prior_Kristian, size = sample_size, replace = T),
+  prior_Daina = sample(df$p_grid, prob = df_new$prior_Daina, size = sample_size, replace = T),
+  prior_Mikkel = sample(df$p_grid, prob = df_new$prior_Mikkel, size = sample_size, replace = T),
+  
+  # Samples from the posterior distribution
+  posterior_Riccardo = sample(df$p_grid, prob = df_new$likelihood_Riccardo, size = sample_size, replace = T),
+  posterior_Kristian = sample(df$p_grid, prob = df_new$likelihood_Kristian, size = sample_size, replace = T),
+  posterior_Daina = sample(df$p_grid, prob = df_new$likelihood_Daina, size = sample_size, replace = T),
+  posterior_Mikkel = sample(df$p_grid, prob = df_new$likelihood_Mikkel, size = sample_size, replace = T)
+  )
+
+
+
+# AWKWARD FUNCTIONS FOR INDEXING THE LOWER AND UPPER BOUNDARIES OF THE HPDI
+hpdi_lower <- function(x, prob = 0.89){
+  lower = HPDI(x, prob = prob)[[1]]}
+
+hpdi_upper <- function(x, prob = 0.89){
+  lower = HPDI(x, prob = prob)[[2]]}
+
+# USING THESE AWKWARD FUNCTIONS
+hpdi <- tibble(
+  name = colnames(samples),
+  lower = lapply(samples, hpdi_lower),
+  upper = lapply(samples, hpdi_upper)) %>% 
+  separate(col = name, c("Distribution","Teacher"), sep = "_", convert = T) %>% 
+  pivot_longer(
+    cols = c("lower", "upper"),
+    names_to = "Quantile",
+    values_to = "Value"
+  ) %>% 
+  mutate(
+    Value = as.numeric(Value),
+    Distribution = relevel(as.factor(Distribution), "prior")
+  )
+
+### FOUND A MUCH EASIER WAY YAY
+hpdi <- tibble(
+  name = colnames(samples),
+  hpdi_values = lapply(samples, HPDI)) %>% 
+  unnest(hpdi_values) %>% 
+  separate(name, c("Distribution","Teacher"), sep = "_", convert = T)
+
+# PLOTTING
+hpdi %>% 
+  ggplot(aes(x = Distribution, y = Value, color = Distribution))+
+  geom_point()+
+  geom_line()+
+  stat_summary(fun = "mean", geom = "point", color = "black", size = 1)+
+  stat_summary(fun.y = "mean", geom = "line", aes(group = "prior"), color = "black", alpha = 0.3)+
+  facet_wrap(~Teacher)
+
+
+```
+
+```{r}
+# sample_size
+sample_size = 1000
+
+# Creating a data_frame with samples from all the teachers
+samples <- tibble(
+  # Samples from prior distribution
+  prior_Riccardo = sample(df$p_grid, prob = df_new$prior_Riccardo, size = sample_size, replace = T),
+  prior_Kristian = sample(df$p_grid, prob = df_new$prior_Kristian, size = sample_size, replace = T),
+  prior_Daina = sample(df$p_grid, prob = df_new$prior_Daina, size = sample_size, replace = T),
+  prior_Mikkel = sample(df$p_grid, prob = df_new$prior_Mikkel, size = sample_size, replace = T),
+  
+  # Samples from the posterior distribution
+  posterior_Riccardo = sample(df$p_grid, prob = df_new$likelihood_Riccardo, size = sample_size, replace = T),
+  posterior_Kristian = sample(df$p_grid, prob = df_new$likelihood_Kristian, size = sample_size, replace = T),
+  posterior_Daina = sample(df$p_grid, prob = df_new$likelihood_Daina, size = sample_size, replace = T),
+  posterior_Mikkel = sample(df$p_grid, prob = df_new$likelihood_Mikkel, size = sample_size, replace = T)
+  )
+
+
+hep <- df_new %>% 
+    select(-p_grid) %>% 
+    summarise()
+```
+
+
 4. How does the new data look in last year's predictive posterior? (way 2)
+
+```{r}
+#################### PREDICTING NEW DATA FROM OLD POSTERIOR ########################
+
+# Creating new samples from the posteriors of the old data.
+sample_size = 1000
+
+samples_old <- tibble(
+  Riccardo = sample(df_new$p_grid, prob = df_new$prior_Riccardo, size = sample_size, replace = T),
+  Kristian = sample(df_new$p_grid, prob = df_new$prior_Kristian, size = sample_size, replace = T),
+  Daina = sample(df_new$p_grid, prob = df_new$prior_Daina, size = sample_size, replace = T),
+  Mikkel = sample(df_new$p_grid, prob = df_new$prior_Mikkel, size = sample_size, replace = T))
+
+# With the samples from the posterior distribution of the old data, we can create simulations of how the teachers would perform if asked more questions.
+simulation_size = 1e6
+
+simulations <- tibble(
+  Riccardo = rbinom(simulation_size, size = 10, prob = samples_old$Riccardo),
+  Kristian = rbinom(simulation_size, size = 12, prob = samples_old$Kristian),
+  Daina = rbinom(simulation_size, size = 172, prob = samples_old$Daina),
+  Mikkel = rbinom(simulation_size, size = 65, prob = samples_old$Mikkel)
+  ) %>% 
+  pivot_longer(
+    cols = everything(),
+    names_to = "Teacher", 
+    values_to = "correct_answers"
+  )
+```
+
+
+```{r}
+############ PLOTTING ############
+# Riccardo
+ric_plot <- simulations %>% 
+  filter(Teacher == "Riccardo") %>% 
+  ggplot(aes(x = correct_answers))+
+  geom_histogram(aes(fill = correct_answers == 9), 
+                 binwidth = 1, center = 0,
+                 color = "grey92", size = 1/10)+
+  scale_fill_viridis_d(option = "D", end = .9) +
+  geom_vline(xintercept = PI(simulations$correct_answers[simulations$Teacher == "Riccardo"], prob = 0.50)[[1]], color = "blue")+
+  geom_vline(xintercept = PI(simulations$correct_answers[simulations$Teacher == "Riccardo"], prob = 0.50)[[2]], color = "blue")+
+  labs(x = "Correct Answers", y = "Counts", title = "Riccardo") +
+  theme(legend.position = "none",
+        panel.grid = element_blank())
+
+# Kristian
+kri_plot <- simulations %>% 
+  filter(Teacher == "Kristian") %>% 
+  ggplot(aes(x = correct_answers))+
+  geom_histogram(aes(fill = correct_answers == 8), 
+                 binwidth = 1, center = 0,
+                 color = "grey92", size = 1/10)+
+  scale_fill_viridis_d(option = "D", end = .9) +
+  geom_vline(xintercept = PI(simulations$correct_answers[simulations$Teacher == "Kristian"], prob = 0.50)[[1]], color = "blue")+
+  geom_vline(xintercept = PI(simulations$correct_answers[simulations$Teacher == "Kristian"], prob = 0.50)[[2]], color = "blue")+
+  labs(x = "Correct Answers", y = "Counts", title = "Kristian") +
+  theme(legend.position = "none",
+        panel.grid = element_blank())
+
+# Daina
+dai_plot <- simulations %>% 
+  filter(Teacher == "Daina") %>% 
+  ggplot(aes(x = correct_answers))+
+  geom_histogram(aes(fill = correct_answers == 148), 
+                 binwidth = 1, center = 0,
+                 color = "grey92", size = 1/10)+
+  scale_fill_viridis_d(option = "D", end = .9) +
+  geom_vline(xintercept = PI(simulations$correct_answers[simulations$Teacher == "Daina"], prob = 0.50)[[1]], color = "blue")+
+  geom_vline(xintercept = PI(simulations$correct_answers[simulations$Teacher == "Daina"], prob = 0.50)[[2]], color = "blue")+
+  labs(x = "Correct Answers", y = "Counts", title = "Daina") +
+  theme(legend.position = "none",
+        panel.grid = element_blank())
+
+# Mikkel
+mik_plot <- simulations %>% 
+  filter(Teacher == "Mikkel") %>% 
+  ggplot(aes(x = correct_answers))+
+  geom_histogram(aes(fill = correct_answers == 34), 
+                 binwidth = 1, center = 0,
+                 color = "grey92", size = 1/10)+
+  scale_fill_viridis_d(option = "D", end = .9) +
+  geom_vline(xintercept = PI(simulations$correct_answers[simulations$Teacher == "Mikkel"], prob = 0.50)[[1]], color = "blue")+
+  geom_vline(xintercept = PI(simulations$correct_answers[simulations$Teacher == "Mikkel"], prob = 0.50)[[2]], color = "blue")+
+  labs(x = "Correct Answers", y = "Counts", title = "Mikkel") +
+  theme(legend.position = "none",
+        panel.grid = element_blank())
+
+
+(ric_plot + kri_plot) / (dai_plot + mik_plot)
+
+```
+
+
+
+
+
+```{r}
+simulations %>% 
+  group_by(Teacher) %>% 
+  count(correct_answers) %>% 
+  filter(Teacher == "Riccardo" & correct_answers == 9 
+         | Teacher == "Kristian" & correct_answers == 8
+         | Teacher == "Daina" & correct_answers == 148
+         | Teacher == "Mikkel" & correct_answers == 34) %>% 
+  ungroup() %>% 
+  mutate(
+    proportion = n/simulation_size
+  )
+  
+                                                       
+```
+
+
