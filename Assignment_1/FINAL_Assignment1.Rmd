@@ -656,6 +656,6 @@ mik_plot <- simulations %>%
         panel.grid = element_blank())
 
 
-(ric_plot + kri_plot) / (dai_plot + mik_plot)
+(ric_plot + kri_plot) / (dai_plot + mik_plot) 
 
 ```
