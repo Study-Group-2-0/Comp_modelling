@@ -460,6 +460,20 @@ plot_post <-
 
 plot_prior + plot_post
 ```
+```{r}
+df_1 %>% pivot_longer(
+  cols = c('Prior', 'Posterior'), 
+  names_to = 'Distribution',
+  values_to = 'value') %>%
+  ggplot(aes(p_grid, value, colour = Distribution))+
+  geom_line()+
+  geom_point(size = 0.2)+
+  facet_wrap(~Teacher) +
+  labs(x = "Proportion of Correct Answers", y = "", title = "Prior distributions") +
+  theme_minimal() 
+
+
+```
 
 
 ```{r}
@@ -553,11 +567,14 @@ hpdi <- tibble(
   name = colnames(samples),
   hpdi_values = lapply(samples, HPDI)) %>% 
   unnest(hpdi_values) %>% 
-  separate(name, c("Distribution","Teacher"), sep = "_", convert = T)
+  separate(name, c("Distribution","Teacher"), sep = "_", convert = T) %>% 
+  mutate(
+    Distribution = relevel(as.factor(Distribution), 'prior')
+  )
 
 # PLOTTING
 hpdi %>% 
-  ggplot(aes(x = Distribution, y = Value, color = Distribution))+
+  ggplot(aes(x = Distribution, y = hpdi_values, color = Distribution))+
   geom_point()+
   geom_line()+
   stat_summary(fun = "mean", geom = "point", color = "black", size = 1)+

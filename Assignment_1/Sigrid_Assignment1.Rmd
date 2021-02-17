@@ -315,7 +315,7 @@ tjek - kør gammel kode med al data på én gang
 tjek - HPDI ()
 
 ```{r}
-######################### NEW POSTERIOR BASED ON THE OLD POSTERIOR (PRIOR) ############################
+###################### NEW POSTERIOR BASED ON THE OLD POSTERIOR (PRIOR) ############################
 dens = 100
 
 # Making the grid and normal prior
@@ -412,12 +412,14 @@ df_samples <- tibble(
   sample_daina = sample(df_old$p_grid, size = 1e3, replace = T, prob = df_old$post_Daina), 
   sample_mik = sample(df_old$p_grid, size = 1e3, replace = T, prob = df_old$post_Mikkel)
 )
+  
+rbinom(n = 1e4, size = 10, prob = )
 
 # PLOTTING RICCARDO 
 ric <- df_samples %>% ggplot(aes(x = p_grid)) +
   geom_density(aes(sample_ric)) +
   geom_ribbon(data = df_samples %>% filter(p_grid > 0.899 & p_grid < 0.901),
-              aes(ymin = 0, ymax = 3, xmax = 1),
+              aes(ymin = 0, ymax = 3, xmin = 0, xmax = 1),
               size = 2, 
               fill = 'red') +
   labs(x = 'Proportion of correct answers', title = "Riccardo's sampled pred. post. dist.") + 
@@ -428,7 +430,7 @@ ric <- df_samples %>% ggplot(aes(x = p_grid)) +
 kris <- df_samples %>% ggplot(aes(x = p_grid)) +
   geom_density(aes(sample_kris)) + 
     geom_ribbon(data = df_samples %>% filter(p_grid > 0.665 & p_grid < 0.667),
-              aes(ymin = 0, ymax = 3, xmax = 1),
+              aes(ymin = 0, ymax = 3, xmin = 0, xmax = 1),
               size = 2, 
               fill = 'red') +
   labs(x = 'Proportion of correct answers', title = "Kristian's sampled pred. post. dist.") + 
@@ -438,7 +440,7 @@ kris <- df_samples %>% ggplot(aes(x = p_grid)) +
 daina <-df_samples %>% ggplot(aes(x = p_grid)) +
   geom_density(aes(sample_daina)) + 
     geom_ribbon(data = df_samples %>% filter(p_grid > 0.859 & p_grid < 0.861),
-              aes(ymin = 0, ymax = 15, xmax = 1),
+              aes(ymin = 0, ymax = 15, xmin = 0, xmax = 1),
               size = 2, 
               fill = 'red') +
   labs(x = 'Proportion of correct answers', title = "Daina's sampled pred. post. dist.") + 
@@ -448,7 +450,7 @@ daina <-df_samples %>% ggplot(aes(x = p_grid)) +
 mikkel <- df_samples %>% ggplot(aes(x = p_grid)) +
   geom_density(aes(sample_mik)) + 
     geom_ribbon(data = df_samples %>% filter(p_grid > 0.512 & p_grid < 0.524),
-              aes(ymin = 0, ymax = 9, xmax = 1),
+              aes(ymin = 0, ymax = 9, xmin = 0, xmax = 1),
               size = 1, 
               fill = 'red') +
   labs(x = 'Proportion of correct answers', title = "Mikkel's sampled pred. post. dist.") + 
