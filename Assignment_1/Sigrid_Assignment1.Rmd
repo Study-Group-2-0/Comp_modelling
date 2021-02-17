@@ -308,5 +308,187 @@ Guidance Tips
 
 1. There are at least two ways of assessing predictions.
 2. Last year's results are this year's expectations.
-3. Are the parameter estimates changing? (way 1)
+3. Are the parameter estimates changing? (way 1) *sidste års posterior som ny prior (bayesian update)*
 4. How does the new data look in last year's predictive posterior? (way 2)
+
+tjek - kør gammel kode med al data på én gang
+tjek - HPDI ()
+
+```{r}
+######################### NEW POSTERIOR BASED ON THE OLD POSTERIOR (PRIOR) ############################
+dens = 100
+
+# Making the grid and normal prior
+df_normal <- tibble(
+  p_grid = seq(0, 1, length.out = dens),
+  brior = dnorm(p_grid, mean = 0.8, sd = 0.2)
+) %>% 
+# Calculating likelihood and posterior
+  mutate(
+    prior_Riccardo = dbinom(3, size = 6, prob = p_grid),
+    prior_Kristian = dbinom(2, size = 2, prob = p_grid),
+    prior_Daina = dbinom(160, size = 198, prob = p_grid),
+    prior_Mikkel = dbinom(66, size = 132, prob = p_grid),
+    across(starts_with("prior"), ~ .x*brior), # unstd. posterior
+    across(starts_with("prior"), ~ .x/sum(.x)),# std. posterior
+    # creating new likelihoods
+    like_ric = dbinom(9, 10, prob = p_grid),
+    like_kris = dbinom(8, 12, prob = p_grid),
+    like_daina = dbinom(148, 172, prob = p_grid),
+    like_mik = dbinom(34, 65, prob = p_grid),
+    #unst. and stnd. posterior
+    post_Riccardo = like_ric * prior_Riccardo,
+    post_Kristian = like_kris * prior_Kristian,
+    post_Daina = like_daina * prior_Daina,
+    post_Mikkel = like_daina * prior_Daina,
+    
+    post_Riccardo = post_Riccardo / sum(post_Riccardo),
+    post_Kristian = post_Kristian / sum(post_Kristian),
+    post_Daina = post_Daina / sum(post_Daina),
+    post_Mikkel = post_Mikkel / sum(post_Mikkel)
+  ) %>% 
+  select(c(
+    p_grid, 
+    starts_with('post')
+    )) %>% 
+  pivot_longer(
+    cols = starts_with("post"),
+    names_to = "Teacher",
+    values_to = "Posterior"
+  )%>% 
+  separate(Teacher, c(NA, "Teacher"), sep = "_", convert = TRUE)
+
+
+# PLOTTING
+ggplot(df_normal) +
+  aes(p_grid, Posterior, colour = Teacher)+
+  geom_line() +
+  geom_point(size = 0.5)+
+    labs(x = 'Proportion of correctly answered questions (pgrid) ', 
+       y = 'Posterior probability', 
+       title = 'Knowledge of CogSci',
+       subtitle = "New posterior based on last year's posterior") + 
+  theme_minimal()+
+  theme(legend.position = 'bottom') #+ 
+  #geom_line(aes(p_grid, prior_Riccardo/dens), color = 'dark blue', size = 1) +  # Prior line 
+
+```
+What we want to do:
+- Sample sidste års predictive posterior distribution og se hvordan den nye data passer ind
+
+```{r}
+############## RECREATING OLD DATA POSTERIOR DISTRIBUTION ##############3
+dens = 1000
+
+df_old <- tibble(
+  p_grid = seq(0, 1, length.out = dens),
+  prior = dnorm(p_grid, mean = 0.8, sd = 0.2)
+) %>% 
+# Calculating likelihood and posterior
+  mutate(
+    post_Riccardo = dbinom(3, size = 6, prob = p_grid),
+    post_Kristian = dbinom(2, size = 2, prob = p_grid),
+    post_Daina = dbinom(160, size = 198, prob = p_grid),
+    post_Mikkel = dbinom(66, size = 132, prob = p_grid),
+    across(starts_with("post"), ~ .x*prior), # unstd. posterior
+    across(starts_with("post"), ~ .x/sum(.x))# std. posterior
+  ) #%>% 
+  pivot_longer(
+    cols = starts_with('post'),
+    names_to = 'Teacher',
+    values_to = 'Posterior'
+  ) %>% 
+  separate(
+    Teacher, c(NA, 'Teacher'), sep = '_', convert = T)
+  
+  
+  ################### SAMPLING ####################
+# creating samples based on the old posterior
+# this is the predictive posterior distribution of the old data
+df_samples <- tibble(
+  p_grid = seq(0, 1, length.out = 1e3),
+  sample_ric = sample(df_old$p_grid, size = 1e3, replace = T, prob = df_old$post_Riccardo),
+  sample_kris = sample(df_old$p_grid, size = 1e3, replace = T, prob = df_old$post_Kristian),
+  sample_daina = sample(df_old$p_grid, size = 1e3, replace = T, prob = df_old$post_Daina), 
+  sample_mik = sample(df_old$p_grid, size = 1e3, replace = T, prob = df_old$post_Mikkel)
+)
+
+# PLOTTING RICCARDO 
+ric <- df_samples %>% ggplot(aes(x = p_grid)) +
+  geom_density(aes(sample_ric)) +
+  geom_ribbon(data = df_samples %>% filter(p_grid > 0.899 & p_grid < 0.901),
+              aes(ymin = 0, ymax = 3, xmax = 1),
+              size = 2, 
+              fill = 'red') +
+  labs(x = 'Proportion of correct answers', title = "Riccardo's sampled pred. post. dist.") + 
+  theme_minimal()
+# ribbon indicates the probability of answering 9 out of 10 questions correctly (new data)
+
+###PLOTTING KRIS
+kris <- df_samples %>% ggplot(aes(x = p_grid)) +
+  geom_density(aes(sample_kris)) + 
+    geom_ribbon(data = df_samples %>% filter(p_grid > 0.665 & p_grid < 0.667),
+              aes(ymin = 0, ymax = 3, xmax = 1),
+              size = 2, 
+              fill = 'red') +
+  labs(x = 'Proportion of correct answers', title = "Kristian's sampled pred. post. dist.") + 
+  theme_minimal()
+  
+###PLOTTING DAINA
+daina <-df_samples %>% ggplot(aes(x = p_grid)) +
+  geom_density(aes(sample_daina)) + 
+    geom_ribbon(data = df_samples %>% filter(p_grid > 0.859 & p_grid < 0.861),
+              aes(ymin = 0, ymax = 15, xmax = 1),
+              size = 2, 
+              fill = 'red') +
+  labs(x = 'Proportion of correct answers', title = "Daina's sampled pred. post. dist.") + 
+  theme_minimal()
+  
+###PLOTTING MIKKEL
+mikkel <- df_samples %>% ggplot(aes(x = p_grid)) +
+  geom_density(aes(sample_mik)) + 
+    geom_ribbon(data = df_samples %>% filter(p_grid > 0.512 & p_grid < 0.524),
+              aes(ymin = 0, ymax = 9, xmax = 1),
+              size = 1, 
+              fill = 'red') +
+  labs(x = 'Proportion of correct answers', title = "Mikkel's sampled pred. post. dist.") + 
+  theme_minimal()
+
+pacman::p_load(patchwork)
+ric + kris + daina + mikkel
+
+### Getting HPDI
+HPDI(sample_ric, prob = 0.9)
+mean(sample_ric, p_grid = 0.9)
+HPDI(samples, prob = 0.9)
+
+```
+
+
+```{r}
+bayesian_ric <- tibble(
+  pgrid = seq(0, 1, length.out = dens), # making grid approximation
+  prior = 1 # stating prior (constant, uniform)
+#  prior = ifelse(pgrid < 0.5, 0, 1)
+  ) %>% 
+  mutate(
+  likelihood = dbinom(3, size = 6, prob = pgrid), #calculating likelihood based on binomial distribution
+  unstd.post = likelihood * prior, #calculating the un-standardized posterior
+  posterior = unstd.post/sum(unstd.post) #calculating the standardized posterior
+)
+
+
+############### QUADRATIC APPROXIMATION OF THE OLD DATA ###################
+ric.qa <- quap(
+  alist(
+    correct ~ dbinom(correct + false, p) , # binomial likelihood 
+    p ~ dunif(0,1) # uniform prior
+    ), 
+data = list(correct = 3, false = 3)
+)
+# display summary of quadratic approximation
+precis(ric.qa)
+
+
+```
+
