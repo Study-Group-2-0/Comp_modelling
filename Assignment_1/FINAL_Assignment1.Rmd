@@ -612,7 +612,7 @@ simulations <- tibble(
 
 ```{r}
 ############ PLOTTING ############
-# ANDERS
+# Anders
 # Riccardo
 ric_plot <- simulations %>% 
   filter(Teacher == "Riccardo") %>% 
@@ -621,8 +621,8 @@ ric_plot <- simulations %>%
                  binwidth = 1, center = 0,
                  color = "grey92", size = 1/10)+
   scale_fill_viridis_d(option = "D", end = .9) +
-  geom_vline(xintercept = PI(simulations$correct_answers[simulations$Teacher == "Riccardo"], prob = 0.50)[[1]], color = "blue")+
-  geom_vline(xintercept = PI(simulations$correct_answers[simulations$Teacher == "Riccardo"], prob = 0.50)[[2]], color = "blue")+
+  geom_vline(xintercept = HPDI(simulations$correct_answers[simulations$Teacher == "Riccardo"], prob = 0.50)[[1]] - 0.5, color = "blue")+
+  geom_vline(xintercept = HPDI(simulations$correct_answers[simulations$Teacher == "Riccardo"], prob = 0.50)[[2]] + 0.5, color = "blue")+
   labs(x = "Correct Answers", y = "Counts", title = "Riccardo") +
   theme(legend.position = "none",
         panel.grid = element_blank())
@@ -635,8 +635,8 @@ kri_plot <- simulations %>%
                  binwidth = 1, center = 0,
                  color = "grey92", size = 1/10)+
   scale_fill_viridis_d(option = "D", end = .9) +
-  geom_vline(xintercept = PI(simulations$correct_answers[simulations$Teacher == "Kristian"], prob = 0.50)[[1]], color = "blue")+
-  geom_vline(xintercept = PI(simulations$correct_answers[simulations$Teacher == "Kristian"], prob = 0.50)[[2]], color = "blue")+
+  geom_vline(xintercept = HPDI(simulations$correct_answers[simulations$Teacher == "Kristian"], prob = 0.50)[[1]] - 0.5, color = "blue")+
+  geom_vline(xintercept = HPDI(simulations$correct_answers[simulations$Teacher == "Kristian"], prob = 0.50)[[2]] + 0.5, color = "blue")+
   labs(x = "Correct Answers", y = "Counts", title = "Kristian") +
   theme(legend.position = "none",
         panel.grid = element_blank())
@@ -649,8 +649,8 @@ dai_plot <- simulations %>%
                  binwidth = 1, center = 0,
                  color = "grey92", size = 1/10)+
   scale_fill_viridis_d(option = "D", end = .9) +
-  geom_vline(xintercept = PI(simulations$correct_answers[simulations$Teacher == "Daina"], prob = 0.50)[[1]], color = "blue")+
-  geom_vline(xintercept = PI(simulations$correct_answers[simulations$Teacher == "Daina"], prob = 0.50)[[2]], color = "blue")+
+  geom_vline(xintercept = HPDI(simulations$correct_answers[simulations$Teacher == "Daina"], prob = 0.50)[[1]] - 0.5, color = "blue")+
+  geom_vline(xintercept = HPDI(simulations$correct_answers[simulations$Teacher == "Daina"], prob = 0.50)[[2]] + 0.5, color = "blue")+
   labs(x = "Correct Answers", y = "Counts", title = "Daina") +
   theme(legend.position = "none",
         panel.grid = element_blank())
@@ -663,8 +663,8 @@ mik_plot <- simulations %>%
                  binwidth = 1, center = 0,
                  color = "grey92", size = 1/10)+
   scale_fill_viridis_d(option = "D", end = .9) +
-  geom_vline(xintercept = PI(simulations$correct_answers[simulations$Teacher == "Mikkel"], prob = 0.50)[[1]], color = "blue")+
-  geom_vline(xintercept = PI(simulations$correct_answers[simulations$Teacher == "Mikkel"], prob = 0.50)[[2]], color = "blue")+
+  geom_vline(xintercept = HPDI(simulations$correct_answers[simulations$Teacher == "Mikkel"], prob = 0.50)[[1]] - 0.5, color = "blue")+
+  geom_vline(xintercept = HPDI(simulations$correct_answers[simulations$Teacher == "Mikkel"], prob = 0.50)[[2]] + 0.5, color = "blue")+
   labs(x = "Correct Answers", y = "Counts", title = "Mikkel") +
   theme(legend.position = "none",
         panel.grid = element_blank())
