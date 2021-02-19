@@ -460,18 +460,21 @@ plot_post <-
 
 plot_prior + plot_post
 ```
+
+
 ```{r}
-df_1 %>% pivot_longer(
-  cols = c('Prior', 'Posterior'), 
-  names_to = 'Distribution',
-  values_to = 'value') %>%
-  ggplot(aes(p_grid, value, colour = Distribution))+
+df_1 %>% 
+  ggplot()+
+  aes(x = p_grid, y = Prior)+
   geom_line()+
   geom_point(size = 0.2)+
-  facet_wrap(~Teacher) +
-  labs(x = "Proportion of Correct Answers", y = "", title = "Prior distributions") +
-  theme_minimal() 
-
+  geom_area(alpha = 0.5, fill = "Red")+
+  geom_line(aes(y= Posterior))+
+  geom_point(aes(y= Posterior), size = 0.2)+
+  geom_area(aes(y=Posterior), alpha = 0.5, fill = "Blue")+
+  facet_wrap( ~ Teacher)+
+  labs(x = "Proportion of Correct Answers", y = "", title = "Prior and posterior distribution for each teacher")+
+  theme_minimal()
 
 ```
 
@@ -723,5 +726,8 @@ simulations %>%
   
                                                        
 ```
+
+
+
 
 
