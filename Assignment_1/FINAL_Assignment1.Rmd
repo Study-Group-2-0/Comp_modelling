@@ -2,7 +2,9 @@
 title: "Computational Modeling - Assignment 1"
 author: "Riccardo Fusaroli"
 date: "07/01/2021"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -41,6 +43,7 @@ pacman::p_load(tidyverse, rethinking, patchwork)
 
 ```{r}
 ############################ THE RICCARDO KNOWLEDGE #################################
+# ANDERS
 # Number of grid points
 dens = 20
 
@@ -74,6 +77,7 @@ mean(riccardo$p_grid > 0.5)
 - Then implement a quadratic approximation (hint check paragraph 2.4.2!).
 ```{r}
 ############################ RICCARDO WITH QUADRATIC APPROXIMATION ##############################
+# GUSTAV
 # Quadratic approximation
 qa <- quap(
   alist(
@@ -97,6 +101,7 @@ curve(dnorm(x, 0.5, 0.2), lty = 2)
 2a. Produce plots of the prior, and posterior for each teacher.
 ```{r}
 ############################ ALL THE TEACHERS KNOWLEDGE #################################
+# SIGRID
 dens = 100
 
 # Making the grid and prior
@@ -137,6 +142,7 @@ ggplot(df) +
 3a. Produce plots of the prior and posterior for each teacher.
 ```{r}
 ############################ ALL TEACHERS WITH NORMAL PRIOR #################################
+# ANDERS
 dens = 100
 
 # Making the grid and prior
@@ -186,6 +192,7 @@ How do the results change:
 4. You go back to your teachers and collect more data (multiply the previous numbers by 100). Calculate their knowledge with both a uniform prior and a normal prior with a mean of 0.8 and a standard deviation of 0.2. Do you still see a difference between the results? Why?
 ```{r}
 #############################  THE UNIFORM PRIOR * 100 OBS #######################################
+# GUSTAV
 dens = 100
 
 # Making the grid and prior
@@ -213,6 +220,7 @@ df_uniform <- tibble(
 
 ```{r}
 #############################  THE NORMAL PRIOR * 100 OBS #################################
+# SIGRID
 # Making the grid and prior
 df_normal <- tibble(
   p_grid = seq(0, 1, length.out = dens),
@@ -237,6 +245,7 @@ df_normal <- tibble(
 
 ```{r}
 ############################ PLOTTING #######################################
+# ANDERS
 # Uniform prior 
 plot_uniform <- ggplot(df_uniform) +
   aes(p_grid, Posterior, colour = Teacher)+
@@ -271,6 +280,7 @@ plot_uniform
 5. Imagine you're a skeptic and think your teachers do not know anything about CogSci, given the content of their classes. How would you operationalize that belief?
 ```{r}
 #############################  THE SKEPTIC PRIOR ############################################
+# GUSTAV
 dens = 100
 
 # Making the grid and prior
@@ -316,7 +326,7 @@ ggplot(df_skeptic) +
 
 ```{r}
 ####################### DIFFERENCE BETWEEN RICCARDO AND OTHER TEACHERS ###################
-
+# SIGRID 
 # Setting seed so the sampling can be replicated
 set.seed(123)
 
@@ -399,7 +409,7 @@ Guidance Tips
 ```{r}
 ###################################### WAY 1 ##############################################
 ########### Creating posterior dist. with prior from the old posterior distr. #############
-
+# ANDERS
 # Length of grid
 sequence_length = 100
 
@@ -456,7 +466,7 @@ df_1 <- merge(df_post, df_prior)
 
 ```{r}
 ########## PLOT 1
-
+# GUSTAV
 df_1 %>% pivot_longer(
   cols = c('Prior', 'Posterior'), 
   names_to = 'Distribution',
@@ -474,6 +484,7 @@ df_1 %>% pivot_longer(
 
 ```{r}
 ######################## Control plot ###################
+# SIGRID
 # Checking whether there is a difference between the new posterior distribution and the post. dist. of the accumulated data
 
 dens = 100
@@ -523,6 +534,7 @@ plot_control + plot_post
 ```
 ```{r}
 ##################### COMPARING DISTRIBUTION PARAMETERS  #######################
+# ANDERS
 # first - sampling the posterior distributions of the old and the new data, respectively
 
 # sample_size
@@ -555,7 +567,8 @@ hpdi <- tibble(
 ```
 
 ```{r}
-# PLOTTING plot 2 ?
+# PLOTTING plot 2
+# GUSTAV
 hpdi %>% 
   ggplot(aes(x = Distribution, y = hpdi_values, color = Distribution))+
   geom_point()+
@@ -570,7 +583,7 @@ hpdi %>%
 
 ```{r}
 #################### PREDICTING NEW DATA FROM OLD POSTERIOR ########################
-
+# SIGRID
 # Creating new samples from the posteriors of the old data.
 sample_size = 1000
 
@@ -599,6 +612,7 @@ simulations <- tibble(
 
 ```{r}
 ############ PLOTTING ############
+# ANDERS
 # Riccardo
 ric_plot <- simulations %>% 
   filter(Teacher == "Riccardo") %>% 
