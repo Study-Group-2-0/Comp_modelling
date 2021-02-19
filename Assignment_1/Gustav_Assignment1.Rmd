@@ -460,18 +460,21 @@ plot_post <-
 
 plot_prior + plot_post
 ```
+
+
 ```{r}
-df_1 %>% pivot_longer(
-  cols = c('Prior', 'Posterior'), 
-  names_to = 'Distribution',
-  values_to = 'value') %>%
-  ggplot(aes(p_grid, value, colour = Distribution))+
+df_1 %>% 
+  ggplot()+
+  aes(x = p_grid, y = Prior)+
   geom_line()+
   geom_point(size = 0.2)+
-  facet_wrap(~Teacher) +
-  labs(x = "Proportion of Correct Answers", y = "", title = "Prior distributions") +
-  theme_minimal() 
-
+  geom_area(alpha = 0.5, fill = "Red")+
+  geom_line(aes(y= Posterior))+
+  geom_point(aes(y= Posterior), size = 0.2)+
+  geom_area(aes(y=Posterior), alpha = 0.5, fill = "Blue")+
+  facet_wrap( ~ Teacher)+
+  labs(x = "Proportion of Correct Answers", y = "", title = "Prior and posterior distribution for each teacher")+
+  theme_minimal()
 
 ```
 
@@ -651,8 +654,8 @@ ric_plot <- simulations %>%
                  binwidth = 1, center = 0,
                  color = "grey92", size = 1/10)+
   scale_fill_viridis_d(option = "D", end = .9) +
-  geom_vline(xintercept = PI(simulations$correct_answers[simulations$Teacher == "Riccardo"], prob = 0.50)[[1]], color = "blue")+
-  geom_vline(xintercept = PI(simulations$correct_answers[simulations$Teacher == "Riccardo"], prob = 0.50)[[2]], color = "blue")+
+  geom_vline(xintercept = HPDI(simulations$correct_answers[simulations$Teacher == "Riccardo"], prob = 0.50)[[1]] - 0.5, color = "blue")+
+  geom_vline(xintercept = HPDI(simulations$correct_answers[simulations$Teacher == "Riccardo"], prob = 0.50)[[2]] + 0.5, color = "blue")+
   labs(x = "Correct Answers", y = "Counts", title = "Riccardo") +
   theme(legend.position = "none",
         panel.grid = element_blank())
@@ -665,8 +668,8 @@ kri_plot <- simulations %>%
                  binwidth = 1, center = 0,
                  color = "grey92", size = 1/10)+
   scale_fill_viridis_d(option = "D", end = .9) +
-  geom_vline(xintercept = PI(simulations$correct_answers[simulations$Teacher == "Kristian"], prob = 0.50)[[1]], color = "blue")+
-  geom_vline(xintercept = PI(simulations$correct_answers[simulations$Teacher == "Kristian"], prob = 0.50)[[2]], color = "blue")+
+  geom_vline(xintercept = HPDI(simulations$correct_answers[simulations$Teacher == "Kristian"], prob = 0.50)[[1]] - 0.5, color = "blue")+
+  geom_vline(xintercept = HPDI(simulations$correct_answers[simulations$Teacher == "Kristian"], prob = 0.50)[[2]] + 0.5, color = "blue")+
   labs(x = "Correct Answers", y = "Counts", title = "Kristian") +
   theme(legend.position = "none",
         panel.grid = element_blank())
@@ -679,8 +682,8 @@ dai_plot <- simulations %>%
                  binwidth = 1, center = 0,
                  color = "grey92", size = 1/10)+
   scale_fill_viridis_d(option = "D", end = .9) +
-  geom_vline(xintercept = PI(simulations$correct_answers[simulations$Teacher == "Daina"], prob = 0.50)[[1]], color = "blue")+
-  geom_vline(xintercept = PI(simulations$correct_answers[simulations$Teacher == "Daina"], prob = 0.50)[[2]], color = "blue")+
+  geom_vline(xintercept = HPDI(simulations$correct_answers[simulations$Teacher == "Daina"], prob = 0.50)[[1]] - 0.5, color = "blue")+
+  geom_vline(xintercept = HPDI(simulations$correct_answers[simulations$Teacher == "Daina"], prob = 0.50)[[2]] + 0.5, color = "blue")+
   labs(x = "Correct Answers", y = "Counts", title = "Daina") +
   theme(legend.position = "none",
         panel.grid = element_blank())
@@ -693,8 +696,8 @@ mik_plot <- simulations %>%
                  binwidth = 1, center = 0,
                  color = "grey92", size = 1/10)+
   scale_fill_viridis_d(option = "D", end = .9) +
-  geom_vline(xintercept = PI(simulations$correct_answers[simulations$Teacher == "Mikkel"], prob = 0.50)[[1]], color = "blue")+
-  geom_vline(xintercept = PI(simulations$correct_answers[simulations$Teacher == "Mikkel"], prob = 0.50)[[2]], color = "blue")+
+  geom_vline(xintercept = HPDI(simulations$correct_answers[simulations$Teacher == "Mikkel"], prob = 0.50)[[1]] - 0.5, color = "blue")+
+  geom_vline(xintercept = HPDI(simulations$correct_answers[simulations$Teacher == "Mikkel"], prob = 0.50)[[2]] + 0.5, color = "blue")+
   labs(x = "Correct Answers", y = "Counts", title = "Mikkel") +
   theme(legend.position = "none",
         panel.grid = element_blank())
@@ -723,5 +726,18 @@ simulations %>%
   
                                                        
 ```
+
+
+```{r}
+pacman::p_load("HDInterval")
+
+hpdi(simulations$correct_answers[simulations$Teacher == "Kristian"], credMass = 0.50)
+
+HPDI(df_new$posterior_Kristian, prob = 0.5)
+hist(df_new$posterior_Kristian)
+
+```
+
+
 
 
