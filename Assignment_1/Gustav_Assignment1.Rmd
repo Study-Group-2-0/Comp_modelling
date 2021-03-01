@@ -352,7 +352,8 @@ samples <- tibble(
 # Plotting 
 ggplot(samples)+
   aes(x = Samples, fill = Teacher)+
-  geom_density()+
+  geom_density( alpha = 0.8)+
+  scale_fill_manual(values = wes_palette("GrandBudapest1"))+
   labs(x = "P Grid", title = "Density Plot of Samples")+
   theme_minimal()
 
