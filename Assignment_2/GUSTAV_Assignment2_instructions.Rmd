@@ -3,6 +3,8 @@ title: "Assignment 2 - Causal inference"
 author: "RF"
 date: "2/5/2020"
 output: html_document
+editor_options: 
+  chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
@@ -30,20 +32,153 @@ N.B. Real clinical scores of symptoms would be on a likert scale, and altercentr
 
 The research questions you have to answer are the following:
 
+```{r}
+# Loading packages
+pacman::p_load(tidyverse, brms, here, patchwork)
+
+# Reading data
+df <- read_csv("Ass2.csv") %>% 
+  # Standardizing all the predictors
+  mutate(
+    across(c(VoiceHearing:AltercentricIntrusion), ~ scale(.x))
+    )
+```
+
 ## First part
 
 Q1.1) Does schizophrenia involve altercentric intrusion? Define model and priors. Test the implications of your priors (prior predictive checks) and if needed adjust them. Run the model. Test the quality of the fitted model (posterior predictive checks, prior-posterior updates). Assess the evidence in favor of an increased altercentric intrusion in schizophrenia. Report the model and the results, including plots.
 
 ```{r}
+############################ Inspecting the predictor ################################
+
+ggplot(df, aes(AltercentricIntrusion))+
+  geom_density()
+
+ggplot(df, aes(x = as.factor(Diagnosis), y = AltercentricIntrusion))+
+  geom_boxplot()
 
 ```
 
+```{r}
+############################ CHECKING THE PRIORS OF THE NULL MODEL ################################
+
+# Defining formula
+AI_f0 <- bf(AltercentricIntrusion ~ 1)
+
+# Defining priors 
+AI_p0 <- c(
+  prior(normal(0,1), class = Intercept),
+  prior(normal(1,0.5), class = sigma)
+)
+
+# Making the model and only checking the priors 
+AI_m0_prior <- brm(
+  formula = AI_f0,
+  prior = AI_p0,
+  family = gaussian,
+  data = df, 
+  sample_prior = "only",
+  file = here("Assignment_2","models_gustav", "AI_m0_prior")
+)
+
+pp_check(AI_m0_prior, nsamples = 100)
+```
+
+
+```{r}
+############################## CHECKING THE PRIORS WITH A PREDICTOR #############################
+
+# Defining formula
+AI_f1 <- bf(AltercentricIntrusion ~ 1 + Diagnosis)
+
+
+# Defining priors 
+AI_p1 <- c(
+  prior(normal(0,1), class = Intercept),
+  prior(normal(1,0.5), class = sigma),
+  prior(normal(0,0.2), class = b, coef = Diagnosis)
+)
+
+# Making the model and only checking the priors 
+AI_m1_prior <- brm(
+  formula = AI_f1,
+  prior = AI_p1,
+  family = gaussian,
+  data = df, 
+  sample_prior = "only" ,
+  file = here("Assignment_2","models_gustav", "AI_m1_prior")
+)
+
+pp_check(AI_m1_prior, nsamples = 100)
+
+```
+
+```{r}
+##################### FITTING THE MODELS #####################
+AI_m0 <- brm(
+  formula = AI_f0,
+  prior = AI_p0,
+  family = gaussian,
+  data = df, 
+  sample_prior = T ,
+  file = here("Assignment_2","models_gustav", "AI_m0")
+)
+
+AI_m1 <- brm(
+  formula = AI_f1,
+  prior = AI_p1,
+  family = gaussian,
+  data = df, 
+  sample_prior = T ,
+  file = here("Assignment_2","models_gustav", "AI_m1")
+)
+
+p1<- pp_check(AI_m0, nsamples=100)
+p2<- pp_check(AI_m1, nsamples=100)
+p1 + p2
+```
+```{r}
+####################### POSTERIOR UPDATE FROM PRIORS ##########################################
+
+posterior <- posterior_samples(AI_m1)
+
+ggplot(posterior) +
+  theme_classic() +
+  geom_density(aes(prior_Intercept), fill="red", alpha=0.3) +
+  geom_density(aes(b_Intercept), fill="blue", alpha=0.5)+
+  labs(title = "Intercept")
+
+ggplot(posterior) +
+  theme_classic() +
+  geom_density(aes(prior_sigma), fill="red", alpha=0.3) +
+  geom_density(aes(sigma), fill="blue", alpha=0.5)+
+  labs(title = "Sigma")
+
+ggplot(posterior) +
+  theme_classic() +
+  geom_density(aes(prior_b_Diagnosis), fill="red", alpha=0.3) +
+  geom_density(aes(b_Diagnosis), fill="blue", alpha=0.5)+
+  labs(title = "Diagnosis")
+
+
+```
+
+```{r}
+####################### CONDITIONAL EFFECTS ##########################################
+hep <- conditional_effects(AI_m1)
+
+plot(conditional_effects(AI_m1), points=T)
+
+plot(conditional_effects(AI_m1, spaghetti=T, nsamples=100, method = "fitted"), points=T)
+
+plot(conditional_effects(AI_m1, spaghetti=T, nsamples=100, method = "predict"), points=T)
+```
 
 Q1.2) Is altercentric intrusion related to specific symptoms *in the patients*? Identify which of the symptoms could be relevant (given their description above). Should you include more than one symptom? Build models, priors, predictive checks. Assess the evidence and report models and results, including plots. Discuss whether the results make sense.
 
 
 ```{r}
-
+hep_formula <- bf(AltercentricIntruision)
 ```
 
 
