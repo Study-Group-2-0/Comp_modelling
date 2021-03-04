@@ -31,6 +31,19 @@ N.B. Real clinical scores of symptoms would be on a likert scale, and altercentr
 The research questions you have to answer are the following:
 
 ## First part
+```{r}
+pacman::p_load(tidyverse, brms, here, patchwork)
+```
+
+```{r}
+############## LOADING DATA
+# Reading data
+df <- read_csv("Ass2.csv") %>% 
+  # Standardizing all the predictors
+  mutate(
+    across(c(VoiceHearing:AltercentricIntrusion), ~ scale(.x))
+    ) 
+```
 
 Q1.1) Does schizophrenia involve altercentric intrusion? Define model and priors. Test the implications of your priors (prior predictive checks) and if needed adjust them. Run the model. Test the quality of the fitted model (posterior predictive checks, prior-posterior updates). Assess the evidence in favor of an increased altercentric intrusion in schizophrenia. Report the model and the results, including plots.
 
@@ -41,10 +54,196 @@ Q1.1) Does schizophrenia involve altercentric intrusion? Define model and priors
 
 Q1.2) Is altercentric intrusion related to specific symptoms *in the patients*? Identify which of the symptoms could be relevant (given their description above). Should you include more than one symptom? Build models, priors, predictive checks. Assess the evidence and report models and results, including plots. Discuss whether the results make sense.
 
+simple way:
+*drop the controls and the diagnosis predictor*
+another way:
+*0 + Diagnosis + Diagnosis:Apathy*
+
+altercentric ~ VoiceHearing + MindReading (might be highly correlated - check this out)
 
 ```{r}
+#################### Inspecting the predictors #############33
+# VoiceHearing
+ggplot(df, aes(VoiceHearing))+
+  geom_density()
+
+ggplot(df, aes(x = as.factor(Diagnosis), y = VoiceHearing))+
+  geom_boxplot()
+
+# MindReading
+ggplot(df, aes(MindReading))+
+  geom_density()
+
+ggplot(df, aes(x = as.factor(Diagnosis), y = MindReading))+
+  geom_boxplot()
+```
+
+```{r}
+###### subsetting the data to only include the schizophrenic patients
+df <- filter(df, df$Diagnosis == 1)
+```
+
+```{r}
+############ CHECKING PRIORS FOR VOICEHEARING #############
+
+AI_f1 <- bf(AltercentricIntrusion ~ VoiceHearing)
+
+AI_p1 <- c(
+  prior(normal(0,1), class = Intercept),
+  prior(normal(1,0.5), class = b),
+  prior(normal(1,0.5), class = sigma)
+)
+
+AI_m1_prior <- brm(
+  formula = AI_f1,
+  prior = AI_p1,
+  family = gaussian,
+  data = df, 
+  sample_prior = 'only',
+  file = here('Assignment_2', 'models_sigrid', 'AI_m1_prior')
+)
+
+pp_check(AI_m1_prior, nsamples = 100)
 
 ```
+
+```{r}
+############ CHECKING PRIORS FOR MINDREADING ##############
+AI_f2 <- bf(AltercentricIntrusion ~ MindReading)
+
+AI_p2 <- c(
+  prior(normal(0,1), class = Intercept),
+  prior(normal(0.7,1), class = b),
+  prior(normal(1,0.5), class = sigma)
+)
+
+AI_m2_prior <- brm(
+  formula = AI_f2,
+  prior = AI_p2,
+  family = gaussian,
+  data = df, 
+  sample_prior = 'only',
+  file = here('Assignment_2', 'models_sigrid', 'AI_m2_prior')
+)
+
+pp_check(AI_m2_prior, nsamples = 100)
+
+# could probably be better but I'll let them be for now
+```
+```{r}
+########## FITTING THE MODELS
+
+# voice hearing
+AI_m1 <- brm(
+  formula = AI_f1,
+  prior = AI_p1,
+  family = gaussian,
+  data = df, 
+  sample_prior = T,
+  file = here('Assignment_2', 'models_sigrid', 'AI_m1')
+)
+
+pp_check(AI_m1, nsamples = 100)
+#rimelig skewed
+
+posterior_summary(AI_m1) %>% round(digits = 2)
+
+
+# mind reading model
+AI_m2 <- brm(
+  formula = AI_f2,
+  prior = AI_p2,
+  family = gaussian,
+  data = df, 
+  sample_prior = T,
+  file = here('Assignment_2', 'models_sigrid', 'AI_m2')
+)
+
+pp_check(AI_m2, nsamples = 100)
+# also a bit skewed
+
+posterior_summary(AI_m2) %>% round(digits = 2)
+```
+we want to update the model to include both predictors
+
+```{r}
+############## CREATING A FULL MODEL ###########
+AI_m2_full <- update(
+  AI_m2_prior,
+  formula = AltercentricIntrusion ~ MindReading + VoiceHearing,
+  seed = 4, 
+  prior = c(
+    prior(normal(0,1), class = Intercept),
+    prior(normal(0.7,1), class = b),
+    prior(normal(1,0.5), class = b),
+    prior(normal(1,0.5), class = sigma)),
+  newdata = df,
+  file = here('Assignment_2', 'models_sigrid', 'AI_m2_full')
+  )
+   
+pp_check(AI_m2_full, nsamples = 100)
+#looks really bad
+posterior_summary(AI_m2_full) %>% round(digits = 2)
+# why are the betas almost the same 
+#what is lp__
+```
+
+
+```{r}
+df %>% 
+  select(AltercentricIntrusion, MindReading, VoiceHearing) %>% 
+  pairs(col = "forestgreen")
+
+# also looks really bad
+```
+```{r}
+pairs(AI_m2_full, pars = parnames(AI_m2_full)[2:3])
+```
+
+```{r}
+library(bayesplot)
+
+color_scheme_set("orange")
+
+mcmc_plot(AI_m2_full, 
+         type = "intervals", 
+         prob = .5, 
+         prob_outer = .95,
+         point_est = "mean") +
+  labs(title = "The coefficient plot for the model with both predictors",
+       subtitle = "Why are the betas exactly the same") +
+  theme(axis.text.y = element_text(hjust = 0),
+        panel.grid.minor = element_blank(),
+        strip.text = element_text(hjust = 0)) 
+```
+```{r}
+bind_cols(
+  posterior_samples(AI_m1) %>% 
+    transmute(`AI_m1_beta[N]` = b_VoiceHearing),
+  posterior_samples(AI_m2) %>% 
+    transmute(`AI_m2_beta[M]` = b_MindReading),
+  posterior_samples(AI_m2_full) %>% 
+    transmute(`AI_m2_full_beta[N]` = b_MindReading,
+              `AI_m2_full_beta[M]` = b_VoiceHearing)
+  ) %>% 
+  pivot_longer(everything()) %>% 
+  group_by(name) %>% 
+  summarise(mean = mean(value),
+            ll   = quantile(value, prob = .025),
+            ul   = quantile(value, prob = .975)) %>% 
+  separate(name, into = c("fit", "parameter"), sep = "_") %>% 
+  # complete(fit, parameter) %>% 
+  
+  ggplot(aes(x = mean, y = fit, xmin = ll, xmax = ul)) +
+  geom_pointrange(color = "firebrick") +
+  geom_hline(yintercept = 0, color = "firebrick", alpha = 1/5) +
+  ylab(NULL) +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        strip.background = element_rect(fill = "transparent", color = "transparent")) +
+  facet_wrap(~parameter, ncol = 1, labeller = label_parsed)
+```
+So far: Both predictors have SD's almosts as big as their beta-estimates and the CI cross 0. 
 
 
 ## Second part
