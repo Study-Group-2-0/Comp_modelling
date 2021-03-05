@@ -2,7 +2,9 @@
 title: "Assignment 2 - Causal inference"
 author: "RF"
 date: "2/5/2020"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -475,50 +477,50 @@ Q3.2) OPTIONAL: is this a general pattern? Try varying the parameters (e.g. corr
 
 
 ```{r}
-pacman::p_load(MASS, tidyverse, psych)
-
-seed <- 1981 # Defining a seed so the results are always the same
-n <- 300 # Defining the amount of participants
-
-SymptomCorr <- .2 # Defining the correlation of symptoms (as they tend to co-occur)
-EffectCorrRel <- .2 # Defining the correlation between relevant symptoms and effect (Some symptoms are positively correlated with the effect)
-EffectCorrIrrel <- 0 # Defining the correlation between irrelevant symptoms and effect (none)
-
-# Creating the variance-covariance matrix for the variables we want to generate (3 symptoms, 1 effect)
-Sigma <- matrix(data=c(1,SymptomCorr,SymptomCorr,EffectCorrRel,
-                       SymptomCorr,1,SymptomCorr,EffectCorrRel,
-                       SymptomCorr,SymptomCorr,1,EffectCorrIrrel,
-                       EffectCorrRel,EffectCorrRel,EffectCorrIrrel,1),
-                       nrow=4,ncol=4)
-
-## Generate data from a multivariate (mvr) normal (n) distribution
-d <- mvrnorm(n = n, # number of participant
-        mu = c(1.2, 1.2, 1.2, 4), # mean of each variable
-        Sigma) # variance co-variance matrix
-
-# Giving meaningful names to variables and add ID
-d <- data.frame(
-  VoiceHearing = d[,1], 
-  MindReading =  d[,2],
-  Apathy =  d[,3], 
-  AltercentricIntrusion = d[,4],
-  ID = seq(nrow(d)))
-
-# Assessing whether the participant has schizophrenia (high enough sum of symptoms)
-# Here we choose participants scoring above 75% percentile (the most severe ones)
-d$Diagnosis <- 0
-d$Diagnosis[(d$VoiceHearing + d$MindReading + d$Apathy) > 
-              quantile(d$VoiceHearing + d$MindReading + d$Apathy, .75)] <- 1
-
-## Plotting the relation between variables all participants
-pairs.panels(dplyr::select(d,-Diagnosis, -ID))
-
-
-## Plotting the relation between variables in schizophrenia
-d1 <- d %>% subset(Diagnosis==1) %>% dplyr::select(-Diagnosis, -ID)
-pairs.panels(d1)
-
-
-write_csv(d, "data/Ass2.csv")
+# #pacman::p_load(MASS, tidyverse, psych)
+# 
+# seed <- 1981 # Defining a seed so the results are always the same
+# n <- 300 # Defining the amount of participants
+# 
+# SymptomCorr <- .2 # Defining the correlation of symptoms (as they tend to co-occur)
+# EffectCorrRel <- .2 # Defining the correlation between relevant symptoms and effect (Some symptoms are positively correlated with the effect)
+# EffectCorrIrrel <- 0 # Defining the correlation between irrelevant symptoms and effect (none)
+# 
+# # Creating the variance-covariance matrix for the variables we want to generate (3 symptoms, 1 effect)
+# Sigma <- matrix(data=c(1,SymptomCorr,SymptomCorr,EffectCorrRel,
+#                        SymptomCorr,1,SymptomCorr,EffectCorrRel,
+#                        SymptomCorr,SymptomCorr,1,EffectCorrIrrel,
+#                        EffectCorrRel,EffectCorrRel,EffectCorrIrrel,1),
+#                        nrow=4,ncol=4)
+# 
+# ## Generate data from a multivariate (mvr) normal (n) distribution
+# d <- mvrnorm(n = n, # number of participant
+#         mu = c(1.2, 1.2, 1.2, 4), # mean of each variable
+#         Sigma) # variance co-variance matrix
+# 
+# # Giving meaningful names to variables and add ID
+# d <- data.frame(
+#   VoiceHearing = d[,1], 
+#   MindReading =  d[,2],
+#   Apathy =  d[,3], 
+#   AltercentricIntrusion = d[,4],
+#   ID = seq(nrow(d)))
+# 
+# # Assessing whether the participant has schizophrenia (high enough sum of symptoms)
+# # Here we choose participants scoring above 75% percentile (the most severe ones)
+# d$Diagnosis <- 0
+# d$Diagnosis[(d$VoiceHearing + d$MindReading + d$Apathy) > 
+#               quantile(d$VoiceHearing + d$MindReading + d$Apathy, .75)] <- 1
+# 
+# ## Plotting the relation between variables all participants
+# pairs.panels(dplyr::select(d,-Diagnosis, -ID))
+# 
+# 
+# ## Plotting the relation between variables in schizophrenia
+# d1 <- d %>% subset(Diagnosis==1) %>% dplyr::select(-Diagnosis, -ID)
+# pairs.panels(d1)
+# 
+# 
+# write_csv(d, "data/Ass2.csv")
 ```
 
