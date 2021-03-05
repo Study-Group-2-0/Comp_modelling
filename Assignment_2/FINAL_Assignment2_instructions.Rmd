@@ -30,22 +30,432 @@ N.B. Real clinical scores of symptoms would be on a likert scale, and altercentr
 
 The research questions you have to answer are the following:
 
+```{r}
+# Loading packages
+pacman::p_load(tidyverse, brms, here, patchwork, bayesplot)
+
+# Reading data
+df <- read_csv("Ass2.csv") %>% 
+  # Standardizing all the predictors
+  mutate(
+    across(c(VoiceHearing:AltercentricIntrusion), ~ scale(.x))
+    )
+```
+
 ## First part
 
 Q1.1) Does schizophrenia involve altercentric intrusion? Define model and priors. Test the implications of your priors (prior predictive checks) and if needed adjust them. Run the model. Test the quality of the fitted model (posterior predictive checks, prior-posterior updates). Assess the evidence in favor of an increased altercentric intrusion in schizophrenia. Report the model and the results, including plots.
 
 ```{r}
+############################ Inspecting the predictor ################################
+
+ggplot(df, aes(AltercentricIntrusion))+
+  geom_density()
+
+ggplot(df, aes(x = as.factor(Diagnosis), y = AltercentricIntrusion))+
+  geom_boxplot()
 
 ```
 
+```{r}
+############################ CHECKING THE PRIORS OF THE NULL MODEL ################################
 
-Q1.2) Is altercentric intrusion related to specific symptoms *in the patients*? Identify which of the symptoms could be relevant (given their description above). Should you include more than one symptom? Build models, priors, predictive checks. Assess the evidence and report models and results, including plots. Discuss whether the results make sense.
+# Defining formula
+AI_f0 <- bf(AltercentricIntrusion ~ 1)
+
+# Defining priors 
+AI_p0 <- c(
+  prior(normal(0,1), class = Intercept),
+  prior(normal(1,0.5), class = sigma)
+)
+
+# Making the model and only checking the priors 
+AI_m0_prior <- brm(
+  formula = AI_f0,
+  prior = AI_p0,
+  family = gaussian,
+  data = df, 
+  sample_prior = "only",
+  file = here("Assignment_2","models_gustav", "AI_m0_prior")
+)
+
+pp_check(AI_m0_prior, nsamples = 100)
+```
 
 
 ```{r}
+############################## CHECKING THE PRIORS WITH A PREDICTOR #############################
+
+# Defining formula
+AI_f1 <- bf(AltercentricIntrusion ~ 1 + Diagnosis)
+
+
+# Defining priors 
+AI_p1 <- c(
+  prior(normal(0,1), class = Intercept),
+  prior(normal(1,0.5), class = sigma),
+  prior(normal(0,0.2), class = b, coef = Diagnosis)
+)
+
+# Making the model and only checking the priors 
+AI_m1_prior <- brm(
+  formula = AI_f1,
+  prior = AI_p1,
+  family = gaussian,
+  data = df, 
+  sample_prior = "only" ,
+  file = here("Assignment_2","models_gustav", "AI_m1_prior")
+)
+
+pp_check(AI_m1_prior, nsamples = 100)
 
 ```
 
+```{r}
+##################### FITTING THE MODELS #####################
+AI_m0 <- brm(
+  formula = AI_f0,
+  prior = AI_p0,
+  family = gaussian,
+  data = df, 
+  sample_prior = T ,
+  file = here("Assignment_2","models_gustav", "AI_m0")
+)
+
+AI_m1 <- brm(
+  formula = AI_f1,
+  prior = AI_p1,
+  family = gaussian,
+  data = df, 
+  sample_prior = T ,
+  file = here("Assignment_2","models_gustav", "AI_m1")
+)
+
+p1<- pp_check(AI_m0, nsamples=100)
+p2<- pp_check(AI_m1, nsamples=100)
+p1 + p2
+```
+
+
+```{r}
+################## SUMMARY ##############
+posterior_summary(AI_m1) %>% round(digits = 2)
+
+```
+
+
+```{r, fig.width = 10, fig.height=4}
+####################### POSTERIOR UPDATE FROM PRIORS ##########################################
+
+posterior <- posterior_samples(AI_m1)
+
+posterior %>% 
+  select(-lp__) %>% 
+  rename(
+    b_sigma = sigma,
+    prior_Diagnosis = prior_b_Diagnosis) %>% 
+  pivot_longer(cols = everything(), 
+               names_to = "Parameter",
+               values_to = "Value") %>% 
+  separate(Parameter, into = c("Distribution", "Parameter"), sep = "_") %>% 
+  mutate(Distribution = ifelse(Distribution == "b", "Posterior", "Prior")) %>% 
+  # Plotting ------------------------------------------
+  ggplot(aes(Value, fill = Distribution))+
+  geom_density( alpha = 0.8)+
+  scale_fill_manual(values = wesanderson::wes_palette("GrandBudapest2"))+
+  facet_wrap(~Parameter, nrow = 1, )+
+  labs(title = "Posterior update from priors")+
+  theme_bw()+
+  theme(strip.text = element_text(size=15),
+        axis.title=element_text(size=15),
+        plot.title = element_text(size = 20, face = "bold", hjust = 0.5))
+
+
+```
+
+
+```{r, fig.height = 2.5, fig.width = 7}
+color_scheme_set("orange")
+
+mcmc_plot(AI_m1, 
+         type = "intervals", 
+         prob = .5, 
+         prob_outer = .95,
+         point_est = "mean") +
+  labs(title = "The coefficient plot for the model with Diagnosis as predictor") +
+  theme(axis.text.y = element_text(hjust = 0),
+        panel.grid.minor = element_blank(),
+        strip.text = element_text(hjust = 0)) 
+```
+
+Q1.2) Is altercentric intrusion related to specific symptoms *in the patients*? Identify which of the symptoms could be relevant (given their description above). Should you include more than one symptom? Build models, priors, predictive checks. Assess the evidence and report models and results, including plots. Discuss whether the results make sense.
+
+------------------------------------------------------------------------------------------
+*We would predict that both mindreading and voicehearing are symptoms that are related to altercentric intrusion. Therefore we will include them as predictors in our model. First however we will investigate their univariate influence on altercentric intrusion before combining them all into one multiple linear model. *
+------------------------------------------------------------------------------------------
+
+```{r}
+################################## UNIVARIATE ANALYSIS OF SYMPTOMS #########################
+# Subsetting the patients
+patients <- df %>% 
+  filter(Diagnosis == 1)
+```
+
+```{r}
+############ CHECKING PRIORS #############
+
+######### VOICEHEARING #########
+VH_f <- bf(AltercentricIntrusion ~ VoiceHearing)
+
+VH_prior <- c(
+  prior(normal(0,1), class = Intercept),
+  prior(normal(0,0.2), class = b),
+  prior(normal(1,0.5), class = sigma)
+)
+
+AI_VH_prior <- brm(
+  formula = VH_f,
+  prior = VH_prior,
+  family = gaussian,
+  data = patients, 
+  sample_prior = 'only',
+  file = here('Assignment_2', 'models_sigrid', 'AI_VH_prior')
+)
+
+pp_check(AI_VH_prior, nsamples = 100)
+
+############ MINDREADING ##############
+MR_f <- bf(AltercentricIntrusion ~ MindReading)
+
+MR_prior <- c(
+  prior(normal(0,1), class = Intercept),
+  prior(normal(0,0.2), class = b),
+  prior(normal(1,0.5), class = sigma)
+)
+
+AI_MR_prior <- brm(
+  formula = MR_f,
+  prior = MR_prior,
+  family = gaussian,
+  data = patients, 
+  sample_prior = 'only',
+  file = here('Assignment_2', 'models_sigrid', 'AI_MR_prior')
+)
+
+pp_check(AI_MR_prior, nsamples = 100)
+
+```
+```{r}
+# Fitting the models ------------------------------------------------------------------------------
+
+# Voicehearing
+VH_m0 <- brm(
+  formula = VH_f,
+  data = patients,
+  family = gaussian,
+  prior = VH_prior,
+  sample_prior = T,
+  file = here("Assignment_2","models_gustav","VH_m0")
+)
+
+# Mindreading
+MR_m0 <- brm(
+  formula = MR_f,
+  data = patients,
+  family = gaussian,
+  prior = MR_prior,
+  sample_prior = T,
+  file = here("Assignment_2","models_gustav","MR_m0")
+)
+
+##### SUMMARY
+
+pp_check(VH_m0, nsamples = 100)
+
+pp_check(MR_m0, nsamples = 100)
+
+
+posterior_summary(VH_m0) %>% round(digits = 2)
+
+posterior_summary(MR_m0) %>% round(digits = 2)
+
+```
+
+```{r, fig.width = 10, fig.height=8}
+################################## PLOTTING ################################## 
+# Voicehearing ------------------------------------------------------------------------------
+post_VH <- posterior_samples(VH_m0)
+
+VH_plot <- post_VH %>% 
+  select(-lp__) %>% 
+  rename(
+    b_sigma = sigma,
+    prior_VoiceHearing = prior_b_VoiceHearing) %>% 
+  pivot_longer(cols = everything(), 
+               names_to = "Parameter",
+               values_to = "Value") %>% 
+  separate(Parameter, into = c("Distribution", "Parameter"), sep = "_") %>% 
+  mutate(Distribution = ifelse(Distribution == "b", "Posterior", "Prior"),
+         Parameter = fct_relevel(Parameter, "VoiceHearing")) %>% 
+  # Plotting ------------------------------------------
+  ggplot(aes(Value, fill = Distribution))+
+  geom_density( alpha = 0.8)+
+  scale_fill_manual(values = wesanderson::wes_palette("GrandBudapest2"))+
+  facet_wrap(~Parameter, nrow = 1, )+
+  labs(title = "Posterior update from priors - Voicehearing")+
+  theme_bw()+
+  theme(strip.text = element_text(size=15),
+        axis.title=element_text(size=15),
+        plot.title = element_text(size = 20, face = "bold", hjust = 0.5))
+
+# Mindreading ------------------------------------------------------------------------------
+post_MR <- posterior_samples(MR_m0)
+
+MR_plot <- post_MR %>% 
+  select(-lp__) %>% 
+  rename(
+    b_sigma = sigma,
+    prior_MindReading = prior_b_MindReading) %>% 
+  pivot_longer(cols = everything(), 
+               names_to = "Parameter",
+               values_to = "Value") %>% 
+  separate(Parameter, into = c("Distribution", "Parameter"), sep = "_") %>% 
+  mutate(Distribution = ifelse(Distribution == "b", "Posterior", "Prior"),
+         Parameter = fct_relevel(Parameter, "MindReading")) %>% 
+  # Plotting ------------------------------------------
+  ggplot(aes(Value, fill = Distribution))+
+  geom_density( alpha = 0.8)+
+  scale_fill_manual(values = wesanderson::wes_palette("GrandBudapest2"))+
+  facet_wrap(~Parameter, nrow = 1, )+
+  labs(title = "Posterior update from priors - Mindreading")+
+  theme_bw()+
+  theme(strip.text = element_text(size=15),
+        axis.title=element_text(size=15),
+        plot.title = element_text(size = 20, face = "bold", hjust = 0.5))
+
+VH_plot / MR_plot
+
+```
+
+```{r, fig.height = 5, fig.width = 7}
+########### PLOTTING ############3
+color_scheme_set("orange")
+
+# MindReading
+MR_m0_p <- mcmc_plot(MR_m0, 
+         type = "intervals", 
+         prob = .5, 
+         prob_outer = .95,
+         point_est = "mean") +
+  labs(title = "MindReading") +
+  theme(axis.text.y = element_text(hjust = 0),
+        panel.grid.minor = element_blank(),
+        strip.text = element_text(hjust = 0)) 
+
+# VoiceHearing
+VH_m0_p <- mcmc_plot(VH_m0, 
+         type = "intervals", 
+         prob = .5, 
+         prob_outer = .95,
+         point_est = "mean") +
+  labs(title = "VoiceHearing") +
+  theme(axis.text.y = element_text(hjust = 0),
+        panel.grid.minor = element_blank(),
+        strip.text = element_text(hjust = 0)) 
+
+MR_m0_p / VH_m0_p
+```
+
+------------------------------------------------------------------------------
+* After inspecting the symptoms' individual effect with a conservative prior, it seems that neither mindreading or voicehearing have a convincing effect on altercentric intrusion. The symptoms did not deviate from 0 effect. Next we will try to combine the symptoms in a multiple linear model*  
+
+------------------------------------------------------------------------------
+
+```{r}
+########################### MULTIPLE LINEAR MODEL ###################################
+######################### VoiceHearing + MindReading ###################################
+
+multi_f0 <- bf(AltercentricIntrusion ~ 1 + VoiceHearing + MindReading) 
+
+
+# We will use the same priors as for diagnosis. We expect 0 effect, but accept values on up to 2 SD, that is up to 0.4 
+
+multi_prior0 <- c(
+  prior(normal(0,1), class = Intercept),
+  prior(normal(1,0.5), class = sigma),
+  prior(normal(0,0.2), class = b, coef = VoiceHearing),
+  prior(normal(0,0.2), class = b, coef = MindReading)
+)
+
+# Fitting the models ------------------------------------------------------------------------------
+
+# Voicehearing
+multi_m0 <- brm(
+  formula = multi_f0,
+  data = patients,
+  family = gaussian,
+  prior = multi_prior0,
+  sample_prior = T,
+  file = here("Assignment_2","models_gustav","multi_m0")
+)
+
+
+# Inspecting models ------------------------------------------------------------------------------
+posterior_summary(multi_m0) %>% round(digits = 2)
+```
+
+```{r, fig.height = 2.5, fig.width = 7}
+################## PLOTTING ###############
+color_scheme_set("orange")
+
+mcmc_plot(multi_m0, 
+         type = "intervals", 
+         prob = .5, 
+         prob_outer = .95,
+         point_est = "mean") +
+  labs(title = "The coefficient plot for the model with both predictors") +
+  theme(axis.text.y = element_text(hjust = 0),
+        panel.grid.minor = element_blank(),
+        strip.text = element_text(hjust = 0)) 
+```
+
+```{r}
+# MORE PLOTTING
+post_multi0 <- posterior_samples(multi_m0)
+
+post_multi0 %>% 
+  select(-lp__) %>% 
+  rename(
+    b_sigma = sigma,
+    prior_VoiceHearing = prior_b_VoiceHearing,
+    prior_MindReading = prior_b_MindReading) %>% 
+  pivot_longer(cols = everything(), 
+               names_to = "Parameter",
+               values_to = "Value") %>% 
+  separate(Parameter, into = c("Distribution", "Parameter"), sep = "_") %>% 
+  mutate(Distribution = ifelse(Distribution == "b", "Posterior", "Prior"),
+         Parameter = fct_relevel(Parameter, "VoiceHearing")) %>% 
+  # Plotting ------------------------------------------
+  ggplot(aes(Value, fill = Distribution))+
+  geom_density( alpha = 0.8)+
+  scale_fill_manual(values = wesanderson::wes_palette("GrandBudapest2"))+
+  facet_wrap(~Parameter, nrow = 2, )+
+  labs(title = "VoiceHearing + MindReading")+
+  theme_bw()+
+  theme(strip.text = element_text(size=15),
+        axis.title=element_text(size=15),
+        plot.title = element_text(size = 20, face = "bold", hjust = 0.5))
+
+```
+
+
+```{r}
+########## INSPECTING CORRELATIONS ########3
+patients %>% 
+  select(AltercentricIntrusion, MindReading, VoiceHearing) %>% 
+  pairs(col = "forestgreen")
+
+```
 
 ## Second part
 

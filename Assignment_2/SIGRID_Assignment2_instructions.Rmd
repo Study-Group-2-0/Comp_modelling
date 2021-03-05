@@ -90,7 +90,7 @@ AI_f1 <- bf(AltercentricIntrusion ~ VoiceHearing)
 
 AI_p1 <- c(
   prior(normal(0,1), class = Intercept),
-  prior(normal(1,0.5), class = b),
+  prior(normal(0,0.2), class = b),
   prior(normal(1,0.5), class = sigma)
 )
 
@@ -113,7 +113,7 @@ AI_f2 <- bf(AltercentricIntrusion ~ MindReading)
 
 AI_p2 <- c(
   prior(normal(0,1), class = Intercept),
-  prior(normal(0.7,1), class = b),
+  prior(normal(0,0.2), class = b),
   prior(normal(1,0.5), class = sigma)
 )
 
@@ -168,16 +168,15 @@ we want to update the model to include both predictors
 
 ```{r}
 ############## CREATING A FULL MODEL ###########
-AI_m2_full <- update(
-  AI_m2_prior,
+AI_m2_full <- brm(
   formula = AltercentricIntrusion ~ MindReading + VoiceHearing,
   seed = 4, 
   prior = c(
     prior(normal(0,1), class = Intercept),
-    prior(normal(0.7,1), class = b),
-    prior(normal(1,0.5), class = b),
+    prior(normal(0,0.2), class = b, coef = 'MindReading'),
+    prior(normal(0,0.2), class = b, coef = 'VoiceHearing'),
     prior(normal(1,0.5), class = sigma)),
-  newdata = df,
+  data = df,
   file = here('Assignment_2', 'models_sigrid', 'AI_m2_full')
   )
    
