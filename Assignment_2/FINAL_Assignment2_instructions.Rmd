@@ -501,7 +501,7 @@ Q2.2.) Redesign your analysis following the graph and report how the results cha
 # Fitting the models ------------------------------------------------------------------------------
 
 # All predictors
-all_m0 <- brm(
+updated_m0 <- brm(
   formula = multi_f0,
   data = df,
   family = gaussian,
@@ -512,7 +512,55 @@ all_m0 <- brm(
 
 
 # Expecting models ------------------------------------------------------------------------------
-summary(all_m0)
+summary(updated_m0)
+
+
+posterior_summary(updated_m0) %>% round(digits = 2)
+```
+
+
+```{r, fig.height = 2.5, fig.width = 7}
+################## PLOTTING ###############
+color_scheme_set("orange")
+
+mcmc_plot(updated_m0, 
+         type = "intervals", 
+         prob = .5, 
+         prob_outer = .95,
+         point_est = "mean") +
+  labs(title = "The coefficient plot for the model with both predictors") +
+  theme(axis.text.y = element_text(hjust = 0),
+        panel.grid.minor = element_blank(),
+        strip.text = element_text(hjust = 0)) 
+```
+
+
+```{r}
+# MORE PLOTTING
+post_updated_m0 <- posterior_samples(updated_m0)
+
+post_updated_m0 %>% 
+  select(-lp__) %>% 
+  rename(
+    b_sigma = sigma,
+    prior_VoiceHearing = prior_b_VoiceHearing,
+    prior_MindReading = prior_b_MindReading) %>% 
+  pivot_longer(cols = everything(), 
+               names_to = "Parameter",
+               values_to = "Value") %>% 
+  separate(Parameter, into = c("Distribution", "Parameter"), sep = "_") %>% 
+  mutate(Distribution = ifelse(Distribution == "b", "Posterior", "Prior"),
+         Parameter = fct_relevel(Parameter, "VoiceHearing")) %>% 
+  # Plotting ------------------------------------------
+  ggplot(aes(Value, fill = Distribution))+
+  geom_density( alpha = 0.8)+
+  scale_fill_manual(values = wesanderson::wes_palette("GrandBudapest2"))+
+  facet_wrap(~Parameter, nrow = 2, )+
+  labs(title = "VoiceHearing + MindReading")+
+  theme_bw()+
+  theme(strip.text = element_text(size=15),
+        axis.title=element_text(size=15),
+        plot.title = element_text(size = 20, face = "bold", hjust = 0.5))
 
 ```
 
