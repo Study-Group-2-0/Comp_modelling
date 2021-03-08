@@ -34,7 +34,7 @@ The research questions you have to answer are the following:
 
 ```{r}
 # Loading packages
-pacman::p_load(tidyverse, brms, here, patchwork, bayesplot)
+pacman::p_load(tidyverse, brms, here, patchwork, bayesplot, ggdag)
 
 # Reading data
 df <- read_csv("Ass2.csv") %>% 
@@ -463,7 +463,58 @@ patients %>%
 
 Q2.1) However, we know that the diagnosis is based on symptom assessment: if the overall sum of symptoms is severe enough, the participant gets a diagnosis. In other words, by selecting the patients, and including the symptoms in the model we might have inadvertently introduced an issue in our inference. Do try to draw a causal graph (Directed Acyclical Graph) of the variables and compare it with the types of causal graphs presented in the slides. Discuss which biases you might have introduced.
 
+```{r}
+############################# CREATING A DAG ###############################
+# AI = AltercentricIntrusion
+# VH = VoiceHearing
+# MR = MindReading
+# AP = Apathy
+# D = Diagnosis
+
+dag_coords <-
+  tibble(name = c("AP","AI", "VH", "MR", "D"),
+         x    = c(0, -1.2, 0, 0, 1.2),
+         y    = c(0, 1, 2, 1, 1))
+
+# save our DAG
+dag <-
+  dagify(D ~ VH + MR + AP,
+         AI ~ VH + MR ,
+         AP ~ AI,
+         coords = dag_coords)
+
+# plot 
+dag %>%
+  ggplot(aes(x = x, y = y, xend = xend, yend = yend)) +
+  geom_dag_point(color = "steelblue", alpha = 1/2, size = 6.5) +
+  geom_dag_text(color = "black") +
+  geom_dag_edges() + 
+  theme_dag()
+```
+
+
 Q2.2.) Redesign your analysis following the graph and report how the results change
+```{r}
+################## CREATING A NEW MULTIPLE MODEL WITH ALL PREDICTORS ######################
+################### VoiceHearing + MindReading #############################
+
+# Fitting the models ------------------------------------------------------------------------------
+
+# All predictors
+all_m0 <- brm(
+  formula = multi_f0,
+  data = df,
+  family = gaussian,
+  prior = multi_prior0,
+  sample_prior = T,
+  file = here("Assignment_2","models_gustav","updated_m0")
+)
+
+
+# Expecting models ------------------------------------------------------------------------------
+summary(all_m0)
+
+```
 
 
 ## Third part

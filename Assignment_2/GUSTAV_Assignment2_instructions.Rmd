@@ -278,13 +278,13 @@ AP_m0 <- brm(
 
 # Expecting models ------------------------------------------------------------------------------
 summary(VH_m0)
-hypothesis(VH_m0, "VoiceHearing > 0")
+hypothesis(VH_m0, "VoiceHearing > 0") # Not significant
 
 summary(MR_m0)
-hypothesis(MR_m0, "MindReading > 0")
+hypothesis(MR_m0, "MindReading > 0") # Not significant
 
 summary(AP_m0)
-hypothesis(AP_m0, "Apathy > 0")
+hypothesis(AP_m0, "Apathy > 0") # Not significant 
 ```
 
 
@@ -508,6 +508,73 @@ post_multi1 %>%
 
 ```
 
+```{r}
+######################## MULTIPLE LINEAR MODEL - Liberal Prior ###################################
+######################### VoiceHearing + MindReading + Apathy ###################################
+
+multi_f2 <- bf(AltercentricIntrusion ~ 1 + VoiceHearing + MindReading + Apathy) 
+
+
+# We will use the same priors as for diagnosis. We expect 0 effect, but accept values on up to 2 sd altså 0.4
+
+multi_prior2 <- c(
+  prior(normal(0,1), class = Intercept),
+  prior(normal(1,0.5), class = sigma),
+  prior(normal(0,0.4), class = b, coef = VoiceHearing),
+  prior(normal(0,0.4), class = b, coef = MindReading),
+  prior(normal(0,0.4), class = b, coef = Apathy)
+)
+
+
+# Fitting the models ------------------------------------------------------------------------------
+
+# Voicehearing
+multi_m2 <- brm(
+  formula = multi_f2,
+  data = patients,
+  family = gaussian,
+  prior = multi_prior2,
+  sample_prior = T,
+  file = here("Assignment_2","models_gustav","multi_m2")
+)
+
+
+# Expecting models ------------------------------------------------------------------------------
+summary(multi_m2)
+```
+
+
+```{r}
+# PLOTTING 
+post_multi2 <- posterior_samples(multi_m2)
+
+post_multi2 %>% 
+  select(-lp__) %>% 
+  rename(
+    b_sigma = sigma,
+    prior_VoiceHearing = prior_b_VoiceHearing,
+    prior_MindReading = prior_b_MindReading,
+    prior_Apathy = prior_b_Apathy) %>% 
+  pivot_longer(cols = everything(), 
+               names_to = "Parameter",
+               values_to = "Value") %>% 
+  separate(Parameter, into = c("Distribution", "Parameter"), sep = "_") %>% 
+  mutate(Distribution = ifelse(Distribution == "b", "Posterior", "Prior"),
+         Parameter = fct_relevel(Parameter, c("Apathy","MindReading","VoiceHearing"))) %>% 
+  # Plotting ------------------------------------------
+  ggplot(aes(Value, fill = Distribution))+
+  geom_density( alpha = 0.8)+
+  scale_fill_manual(values = wesanderson::wes_palette("GrandBudapest2"))+
+  facet_wrap(~Parameter, nrow = 2, )+
+  labs(title = "Liberal prior - VoiceHearing + Mindreading + Apathy")+
+  theme_bw()+
+  theme(strip.text = element_text(size=15),
+        axis.title=element_text(size=15),
+        plot.title = element_text(size = 20, face = "bold", hjust = 0.5))
+
+```
+
+
 ## Second part
 
 Q2.1) However, we know that the diagnosis is based on symptom assessment: if the overall sum of symptoms is severe enough, the participant gets a diagnosis. In other words, by selecting the patients, and including the symptoms in the model we might have inadvertently introduced an issue in our inference. Do try to draw a causal graph (Directed Acyclical Graph) of the variables and compare it with the types of causal graphs presented in the slides. Discuss which biases you might have introduced.
@@ -523,16 +590,15 @@ pacman::p_load(ggdag)
 # D = Diagnosis
 
 dag_coords <-
-  tibble(name = c("D","AI", "VH", "MR", "AP"),
-         x    = c(0, -1.2, -0.4, 0.4, 1.2),
-         y    = c(0, 1, 2, 2, 1))
+  tibble(name = c("AP","AI", "VH", "MR", "D"),
+         x    = c(0, -1.2, 0, 0, 1.2),
+         y    = c(0, 1, 2, 1, 1))
 
 # save our DAG
 dag <-
-  dagify(D ~ AI + VH + MR + AP,
-         AI ~ VH + MR + D,
-         VH ~ MR,
-         MR ~ VH,
+  dagify(D ~ VH + MR + AP,
+         AI ~ VH + MR ,
+         AP ~ AI,
          coords = dag_coords)
 
 # plot 
@@ -548,9 +614,9 @@ dag %>%
 Q2.2.) Redesign your analysis following the graph and report how the results change
 ```{r}
 ################## CREATING A NEW MULTIPLE MODEL WITH ALL PREDICTORS ######################
-################### VoiceHearing + MindReading + Diagnosis #############################
+################### VoiceHearing + MindReading #############################
 
-all_f0 <- bf(AltercentricIntrusion ~ 1 + VoiceHearing + MindReading + Diagnosis) 
+all_f0 <- bf(AltercentricIntrusion ~ 1 + VoiceHearing + MindReading ) 
 
 
 # We will use the same priors as for diagnosis. We expect 0 effect, but accept values on up to 2 sd altså 0.4
@@ -559,8 +625,7 @@ all_prior0 <- c(
   prior(normal(0,1), class = Intercept),
   prior(normal(1,0.5), class = sigma),
   prior(normal(0,0.2), class = b, coef = VoiceHearing),
-  prior(normal(0,0.2), class = b, coef = MindReading),
-  prior(normal(0,0.2), class = b, coef = Diagnosis)
+  prior(normal(0,0.2), class = b, coef = MindReading)
 )
 
 
