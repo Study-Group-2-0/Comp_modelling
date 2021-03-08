@@ -30,22 +30,369 @@ N.B. Real clinical scores of symptoms would be on a likert scale, and altercentr
 
 The research questions you have to answer are the following:
 
+```{r}
+# Loading packages
+pacman::p_load(tidyverse, brms, here, patchwork, wesanderson)
+
+# Reading data
+df <- read_csv("Ass2.csv") %>% 
+  # Standardizing all the predictors
+  mutate(
+    across(c(VoiceHearing:AltercentricIntrusion), ~ scale(.x))
+    )
+```
+
 ## First part
 
 Q1.1) Does schizophrenia involve altercentric intrusion? Define model and priors. Test the implications of your priors (prior predictive checks) and if needed adjust them. Run the model. Test the quality of the fitted model (posterior predictive checks, prior-posterior updates). Assess the evidence in favor of an increased altercentric intrusion in schizophrenia. Report the model and the results, including plots.
 
 ```{r}
+############################ Inspecting the predictor ################################
+
+ggplot(df, aes(AltercentricIntrusion))+
+  geom_density()
+
+ggplot(df, aes(x = as.factor(Diagnosis), y = AltercentricIntrusion))+
+  geom_boxplot()
 
 ```
 
+```{r}
+############################ CHECKING THE PRIORS OF THE NULL MODEL ################################
 
-Q1.2) Is altercentric intrusion related to specific symptoms *in the patients*? Identify which of the symptoms could be relevant (given their description above). Should you include more than one symptom? Build models, priors, predictive checks. Assess the evidence and report models and results, including plots. Discuss whether the results make sense.
+# Defining formula
+AI_f0 <- bf(AltercentricIntrusion ~ 1)
+
+# Defining priors 
+AI_p0 <- c(
+  prior(normal(0,1), class = Intercept),
+  prior(normal(1,0.5), class = sigma)
+)
+
+# Making the model and only checking the priors 
+AI_m0_prior <- brm(
+  formula = AI_f0,
+  prior = AI_p0,
+  family = gaussian,
+  data = df, 
+  sample_prior = "only",
+  file = here("Assignment_2","models_gustav", "AI_m0_prior")
+)
+
+pp_check(AI_m0_prior, nsamples = 100)
+```
 
 
 ```{r}
+############################## CHECKING THE PRIORS WITH A PREDICTOR #############################
+
+# Defining formula
+AI_f1 <- bf(AltercentricIntrusion ~ 1 + Diagnosis)
+
+
+# Defining priors 
+AI_p1 <- c(
+  prior(normal(0,1), class = Intercept),
+  prior(normal(1,0.5), class = sigma),
+  prior(normal(0,0.2), class = b, coef = Diagnosis)
+)
+
+# Making the model and only checking the priors 
+AI_m1_prior <- brm(
+  formula = AI_f1,
+  prior = AI_p1,
+  family = gaussian,
+  data = df, 
+  sample_prior = "only" ,
+  file = here("Assignment_2","models_gustav", "AI_m1_prior")
+)
+
+pp_check(AI_m1_prior, nsamples = 100)
 
 ```
 
+```{r}
+##################### FITTING THE MODELS #####################
+AI_m0 <- brm(
+  formula = AI_f0,
+  prior = AI_p0,
+  family = gaussian,
+  data = df, 
+  sample_prior = T ,
+  file = here("Assignment_2","models_gustav", "AI_m0")
+)
+
+AI_m1 <- brm(
+  formula = AI_f1,
+  prior = AI_p1,
+  family = gaussian,
+  data = df, 
+  sample_prior = T ,
+  file = here("Assignment_2","models_gustav", "AI_m1")
+)
+
+p1<- pp_check(AI_m0, nsamples=100)
+p2<- pp_check(AI_m1, nsamples=100)
+p1 + p2
+```
+
+
+```{r, fig.width = 10, fig.height=4}
+####################### POSTERIOR UPDATE FROM PRIORS ##########################################
+
+posterior <- posterior_samples(AI_m1)
+
+posterior %>% 
+  select(-lp__) %>% 
+  rename(
+    b_sigma = sigma,
+    prior_Diagnosis = prior_b_Diagnosis) %>% 
+  pivot_longer(cols = everything(), 
+               names_to = "Parameter",
+               values_to = "Value") %>% 
+  separate(Parameter, into = c("Distribution", "Parameter"), sep = "_") %>% 
+  mutate(Distribution = ifelse(Distribution == "b", "Posterior", "Prior")) %>% 
+  
+  # Plotting ------------------------------------------
+  ggplot(aes(Value, fill = Distribution))+
+  geom_density( alpha = 0.8)+
+  scale_fill_manual(values = wesanderson::wes_palette("GrandBudapest2"))+
+  facet_wrap(~Parameter, nrow = 1, )+
+  labs(title = "Posterior update from priors")+
+  theme_bw()+
+  theme(strip.text = element_text(size=15),
+        axis.title=element_text(size=15),
+        plot.title = element_text(size = 20, face = "bold", hjust = 0.5))
+
+
+# ggplot(posterior) +
+#   theme_classic() +
+#   geom_density(aes(prior_Intercept), fill="red", alpha=0.3) +
+#   geom_density(aes(b_Intercept), fill="blue", alpha=0.5)+
+#   labs(title = "Intercept")
+# 
+# ggplot(posterior) +
+#   theme_classic() +
+#   geom_density(aes(prior_sigma), fill="red", alpha=0.3) +
+#   geom_density(aes(sigma), fill="blue", alpha=0.5)+
+#   labs(title = "Sigma")
+# 
+# ggplot(posterior) +
+#   theme_classic() +
+#   geom_density(aes(prior_b_Diagnosis), fill="red", alpha=0.3) +
+#   geom_density(aes(b_Diagnosis), fill="blue", alpha=0.5)+
+#   labs(title = "Diagnosis")
+  
+  
+```
+
+
+```{r}
+####################### CONDITIONAL EFFECTS ##########################################
+cond <- conditional_effects(AI_m1)
+
+plot(conditional_effects(AI_m1), points=T)
+
+plot(conditional_effects(AI_m1, spaghetti=T, nsamples=100, method = "fitted"), points=T)
+
+plot(conditional_effects(AI_m1, spaghetti=T, nsamples=100, method = "predict"), points=T)
+
+```
+
+```{r}
+##################################### HYPOTHESIS ##########################################
+hypothesis(AI_m1, "Diagnosis > 0")
+
+```
+
+Q1.2) Is altercentric intrusion related to specific symptoms *in the patients*? Identify which of the symptoms could be relevant (given their description above). Should you include more than one symptom? Build models, priors, predictive checks. Assess the evidence and report models and results, including plots. Discuss whether the results make sense.
+
+------------------------------------------------------------------------------------------
+*We would predict that both mindreading and voicehearing are symptoms that are related to altercentric intrusion. Therefore we will next include them as predictors in our model. First however we will investigate their univariate influence on altercentric intrusion before combining them all into one multiple linear model. *
+------------------------------------------------------------
+
+```{r}
+#subset
+df_patients <- df %>% 
+  subset(Diagnosis == 1)
+```
+
+
+```{r}
+############################# UNIVARIATE MODELS ##########################
+
+# defining the formulas
+MR_f <- bf(AltercentricIntrusion ~ 1 + MindReading)
+VH_f <- bf(AltercentricIntrusion ~ 1+ VoiceHearing)
+
+
+# Defining the priors
+MR_prior <- c(
+  prior(normal(0,1), class = Intercept), 
+  prior(normal(1,0.5), class = sigma),
+  prior(normal(0,0.2), class = b, coef = MindReading)
+)
+
+VH_prior <- c(
+  prior(normal(0,1), class = Intercept), 
+  prior(normal(1,0.5), class = sigma),
+  prior(normal(0,0.2), class = b, coef = VoiceHearing)
+)
+
+
+# Fitting the models
+MR_model <- brm(
+  formula = MR_f,
+  prior = MR_prior,
+  family = gaussian,
+  data = df_patients, 
+  sample_prior = T 
+  #file = here("Assignment_2","models_gustav", "AI_m0")
+)
+
+VH_model <- brm(
+  formula = VH_f,
+  prior = VH_prior,
+  family = gaussian,
+  data = df_patients, 
+  sample_prior = T
+  #file = here("Assignment_2","models_gustav", "AI_m1")
+)
+
+#making predictive checks
+p_MR<- pp_check(MR_model, nsamples=100)
+p_VH<- pp_check(VH_model, nsamples=100)
+p_MR + p_VH
+
+#making hypotheses
+hypothesis(MR_model, "MindReading > 0")
+hypothesis(VH_model, "VoiceHearing > 0")
+
+```
+
+
+```{r}
+######################## PLOTTING PRIORS AND POSTERIOR UPDATES #############################
+
+# Mindreading ----------------------------------------------------------
+posterior_MR <- posterior_samples(MR_model)
+
+posterior_MR %>% 
+  select(-lp__) %>% 
+  rename(
+    b_sigma = sigma,
+    prior_MindReading = prior_b_MindReading) %>% 
+  pivot_longer(cols = everything(), 
+               names_to = "Parameter",
+               values_to = "Value") %>% 
+  separate(Parameter, into = c("Distribution", "Parameter"), sep = "_") %>% 
+  mutate(Distribution = ifelse(Distribution == "b", "Posterior", "Prior")) %>% 
+  
+  # Plotting 
+  ggplot(aes(Value, fill = Distribution))+
+  geom_density( alpha = 0.8)+
+  scale_fill_manual(values = wesanderson::wes_palette("GrandBudapest2"))+
+  facet_wrap(~Parameter, nrow = 1, )+
+  labs(title = "Posterior update from priors")+
+  theme_bw()+
+  theme(strip.text = element_text(size=15),
+        axis.title=element_text(size=15),
+        plot.title = element_text(size = 20, face = "bold", hjust = 0.5))
+
+
+# VoiceHearing --------------------------------------------
+posterior_VH <- posterior_samples(VH_model)
+
+posterior_VH %>% 
+  select(-lp__) %>% 
+  rename(
+    b_sigma = sigma,
+    prior_VoiceHearing = prior_b_VoiceHearing) %>% 
+  pivot_longer(cols = everything(), 
+               names_to = "Parameter",
+               values_to = "Value") %>% 
+  separate(Parameter, into = c("Distribution", "Parameter"), sep = "_") %>% 
+  mutate(Distribution = ifelse(Distribution == "b", "Posterior", "Prior")) %>% 
+  
+  # Plotting 
+  ggplot(aes(Value, fill = Distribution))+
+  geom_density( alpha = 0.8)+
+  scale_fill_manual(values = wesanderson::wes_palette("GrandBudapest2"))+
+  facet_wrap(~Parameter, nrow = 1, )+
+  labs(title = "Posterior update from priors")+
+  theme_bw()+
+  theme(strip.text = element_text(size=15),
+        axis.title=element_text(size=15),
+        plot.title = element_text(size = 20, face = "bold", hjust = 0.5))
+```
+
+
+
+```{r}
+################# MULTILINEAR MODELS ###############################
+#are two predictors better than one predictor??
+
+# defining the formula
+Multilinear_f <- bf(AltercentricIntrusion ~ 1 + MindReading + VoiceHearing)
+
+
+
+# Defining the prior
+Multilinear_prior <- c(
+  prior(normal(0,1), class = Intercept), 
+  prior(normal(1,0.5), class = sigma),
+  prior(normal(0,0.2), class = b, coef = MindReading),
+  prior(normal(0,0.2), class = b, coef = VoiceHearing)
+)
+
+
+
+# Fitting the model
+Multilinear_model <- brm(
+  formula = Multilinear_f,
+  prior = Multilinear_prior,
+  family = gaussian,
+  data = df_patients, 
+  sample_prior = T 
+  #file = here("Assignment_2","models_gustav", "AI_m0")
+)
+
+
+#making predictice checks
+p_Multilinear<- pp_check(Multilinear_model, nsamples=100)
+p_Multilinear
+
+
+#making hypotheis
+summary(Multilinear_model)
+
+
+#plotting ----------------------------------------------------------
+posterior_Multilinear <- posterior_samples(Multilinear_model)
+
+posterior_Multilinear %>% 
+  select(-lp__) %>% 
+  rename(
+    b_sigma = sigma,
+    prior_MindReading = prior_b_MindReading,
+    prior_Voicehearing = prior_b_VoiceHearing) %>% 
+  pivot_longer(cols = everything(), 
+               names_to = "Parameter",
+               values_to = "Value") %>% 
+  separate(Parameter, into = c("Distribution", "Parameter"), sep = "_") %>% 
+  mutate(Distribution = ifelse(Distribution == "b", "Posterior", "Prior")) %>% 
+  
+  # Plotting 
+  ggplot(aes(Value, fill = Distribution))+
+  geom_density( alpha = 0.8)+
+  scale_fill_manual(values = wesanderson::wes_palette("GrandBudapest2"))+
+  facet_wrap(~Parameter, nrow = 2, )+
+  labs(title = "Posterior update from priors")+
+  theme_bw()+
+  theme(strip.text = element_text(size=15),
+        axis.title=element_text(size=15),
+        plot.title = element_text(size = 20, face = "bold", hjust = 0.5))
+```
 
 ## Second part
 
@@ -65,50 +412,57 @@ Q3.2) OPTIONAL: is this a general pattern? Try varying the parameters (e.g. corr
 
 
 ```{r}
-pacman::p_load(MASS, tidyverse, psych)
-
-seed <- 1981 # Defining a seed so the results are always the same
-n <- 300 # Defining the amount of participants
-
-SymptomCorr <- .2 # Defining the correlation of symptoms (as they tend to co-occur)
-EffectCorrRel <- .2 # Defining the correlation between relevant symptoms and effect (Some symptoms are positively correlated with the effect)
-EffectCorrIrrel <- 0 # Defining the correlation between irrelevant symptoms and effect (none)
-
-# Creating the variance-covariance matrix for the variables we want to generate (3 symptoms, 1 effect)
-Sigma <- matrix(data=c(1,SymptomCorr,SymptomCorr,EffectCorrRel,
-                       SymptomCorr,1,SymptomCorr,EffectCorrRel,
-                       SymptomCorr,SymptomCorr,1,EffectCorrIrrel,
-                       EffectCorrRel,EffectCorrRel,EffectCorrIrrel,1),
-                       nrow=4,ncol=4)
-
-## Generate data from a multivariate (mvr) normal (n) distribution
-d <- mvrnorm(n = n, # number of participant
-        mu = c(1.2, 1.2, 1.2, 4), # mean of each variable
-        Sigma) # variance co-variance matrix
-
-# Giving meaningful names to variables and add ID
-d <- data.frame(
-  VoiceHearing = d[,1], 
-  MindReading =  d[,2],
-  Apathy =  d[,3], 
-  AltercentricIntrusion = d[,4],
-  ID = seq(nrow(d)))
-
-# Assessing whether the participant has schizophrenia (high enough sum of symptoms)
-# Here we choose participants scoring above 75% percentile (the most severe ones)
-d$Diagnosis <- 0
-d$Diagnosis[(d$VoiceHearing + d$MindReading + d$Apathy) > 
-              quantile(d$VoiceHearing + d$MindReading + d$Apathy, .75)] <- 1
-
-## Plotting the relation between variables all participants
-pairs.panels(dplyr::select(d,-Diagnosis, -ID))
-
-
-## Plotting the relation between variables in schizophrenia
-d1 <- d %>% subset(Diagnosis==1) %>% dplyr::select(-Diagnosis, -ID)
-pairs.panels(d1)
-
-
-write_csv(d, "data/Ass2.csv")
+# #pacman::p_load(MASS, tidyverse, psych)
+# 
+# seed <- 1981 # Defining a seed so the results are always the same
+# n <- 300 # Defining the amount of participants
+# 
+# SymptomCorr <- .2 # Defining the correlation of symptoms (as they tend to co-occur)
+# EffectCorrRel <- .2 # Defining the correlation between relevant symptoms and effect (Some symptoms are positively correlated with the effect)
+# EffectCorrIrrel <- 0 # Defining the correlation between irrelevant symptoms and effect (none)
+# 
+# # Creating the variance-covariance matrix for the variables we want to generate (3 symptoms, 1 effect)
+# Sigma <- matrix(data=c(1,SymptomCorr,SymptomCorr,EffectCorrRel,
+#                        SymptomCorr,1,SymptomCorr,EffectCorrRel,
+#                        SymptomCorr,SymptomCorr,1,EffectCorrIrrel,
+#                        EffectCorrRel,EffectCorrRel,EffectCorrIrrel,1),
+#                        nrow=4,ncol=4)
+# 
+# ## Generate data from a multivariate (mvr) normal (n) distribution
+# d <- mvrnorm(n = n, # number of participant
+#         mu = c(1.2, 1.2, 1.2, 4), # mean of each variable
+#         Sigma) # variance co-variance matrix
+# 
+# # Giving meaningful names to variables and add ID
+# d <- data.frame(
+#   VoiceHearing = d[,1], 
+#   MindReading =  d[,2],
+#   Apathy =  d[,3], 
+#   AltercentricIntrusion = d[,4],
+#   ID = seq(nrow(d)))
+# 
+# # Assessing whether the participant has schizophrenia (high enough sum of symptoms)
+# # Here we choose participants scoring above 75% percentile (the most severe ones)
+# d$Diagnosis <- 0
+# d$Diagnosis[(d$VoiceHearing + d$MindReading + d$Apathy) > 
+#               quantile(d$VoiceHearing + d$MindReading + d$Apathy, .75)] <- 1
+# 
+# ## Plotting the relation between variables all participants
+# pairs.panels(dplyr::select(d,-Diagnosis, -ID))
+# 
+# 
+# ## Plotting the relation between variables in schizophrenia
+# d1 <- d %>% subset(Diagnosis==1) %>% dplyr::select(-Diagnosis, -ID)
+# pairs.panels(d1)
+# 
+# 
+# write_csv(d, "data/Ass2.csv")
 ```
+
+
+
+
+
+
+
 
