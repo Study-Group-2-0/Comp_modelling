@@ -33,6 +33,7 @@ N.B. Real clinical scores of symptoms would be on a likert scale, and altercentr
 The research questions you have to answer are the following:
 
 ```{r}
+#SIGRID
 # Loading packages
 pacman::p_load(tidyverse, brms, here, patchwork, bayesplot, ggdag)
 
@@ -50,7 +51,7 @@ Q1.1) Does schizophrenia involve altercentric intrusion? Define model and priors
 
 ```{r}
 ############################ Inspecting the predictor ################################
-
+# ANDERS
 ggplot(df, aes(AltercentricIntrusion))+
   geom_density()
 
@@ -61,7 +62,7 @@ ggplot(df, aes(x = as.factor(Diagnosis), y = AltercentricIntrusion))+
 
 ```{r}
 ############################ CHECKING THE PRIORS OF THE NULL MODEL ################################
-
+# GUSTAV
 # Defining formula
 AI_f0 <- bf(AltercentricIntrusion ~ 1)
 
@@ -87,7 +88,7 @@ pp_check(AI_m0_prior, nsamples = 100)
 
 ```{r}
 ############################## CHECKING THE PRIORS WITH A PREDICTOR #############################
-
+# SIGRID
 # Defining formula
 AI_f1 <- bf(AltercentricIntrusion ~ 1 + Diagnosis)
 
@@ -115,6 +116,7 @@ pp_check(AI_m1_prior, nsamples = 100)
 
 ```{r}
 ##################### FITTING THE MODELS #####################
+# ANDERS
 AI_m0 <- brm(
   formula = AI_f0,
   prior = AI_p0,
@@ -141,6 +143,7 @@ p1 + p2
 
 ```{r}
 ################## SUMMARY ##############
+# ANDERS
 posterior_summary(AI_m1) %>% round(digits = 2)
 
 ```
@@ -148,6 +151,7 @@ posterior_summary(AI_m1) %>% round(digits = 2)
 
 ```{r, fig.width = 10, fig.height=4}
 ####################### POSTERIOR UPDATE FROM PRIORS ##########################################
+# GUSTAV
 
 posterior <- posterior_samples(AI_m1)
 
@@ -177,6 +181,7 @@ posterior %>%
 
 
 ```{r, fig.height = 2.5, fig.width = 7}
+# SIGRID
 color_scheme_set("orange")
 
 mcmc_plot(AI_m1, 
@@ -198,6 +203,7 @@ Q1.2) Is altercentric intrusion related to specific symptoms *in the patients*? 
 
 ```{r}
 ################################## UNIVARIATE ANALYSIS OF SYMPTOMS #########################
+# ANDERS
 # Subsetting the patients
 patients <- df %>% 
   filter(Diagnosis == 1)
@@ -205,6 +211,7 @@ patients <- df %>%
 
 ```{r}
 ############ CHECKING PRIORS #############
+# GUSTAV
 
 ######### VOICEHEARING #########
 VH_f <- bf(AltercentricIntrusion ~ VoiceHearing)
@@ -249,6 +256,7 @@ pp_check(AI_MR_prior, nsamples = 100)
 ```
 ```{r}
 # Fitting the models ------------------------------------------------------------------------------
+# SIGRID
 
 # Voicehearing
 VH_m0 <- brm(
@@ -285,6 +293,8 @@ posterior_summary(MR_m0) %>% round(digits = 2)
 
 ```{r, fig.width = 10, fig.height=8}
 ################################## PLOTTING ################################## 
+# ANDERS 
+
 # Voicehearing ------------------------------------------------------------------------------
 post_VH <- posterior_samples(VH_m0)
 
@@ -340,7 +350,9 @@ VH_plot / MR_plot
 ```
 
 ```{r, fig.height = 5, fig.width = 7}
-########### PLOTTING ############3
+########### PLOTTING #############
+#GUSTAV
+
 color_scheme_set("orange")
 
 # MindReading
@@ -376,6 +388,7 @@ MR_m0_p / VH_m0_p
 ```{r}
 ########################### MULTIPLE LINEAR MODEL ###################################
 ######################### VoiceHearing + MindReading ###################################
+# SIGRID
 
 multi_f0 <- bf(AltercentricIntrusion ~ 1 + VoiceHearing + MindReading) 
 
@@ -408,6 +421,8 @@ posterior_summary(multi_m0) %>% round(digits = 2)
 
 ```{r, fig.height = 2.5, fig.width = 7}
 ################## PLOTTING ###############
+#ANDERS
+
 color_scheme_set("orange")
 
 mcmc_plot(multi_m0, 
@@ -423,6 +438,7 @@ mcmc_plot(multi_m0,
 
 ```{r}
 # MORE PLOTTING
+# GUSTAV
 post_multi0 <- posterior_samples(multi_m0)
 
 post_multi0 %>% 
@@ -453,6 +469,7 @@ post_multi0 %>%
 
 ```{r}
 ########## INSPECTING CORRELATIONS ########3
+# SIGRID
 patients %>% 
   select(AltercentricIntrusion, MindReading, VoiceHearing) %>% 
   pairs(col = "forestgreen")
@@ -465,6 +482,8 @@ Q2.1) However, we know that the diagnosis is based on symptom assessment: if the
 
 ```{r}
 ############################# CREATING A DAG ###############################
+# ANDERS
+
 # AI = AltercentricIntrusion
 # VH = VoiceHearing
 # MR = MindReading
@@ -480,7 +499,6 @@ dag_coords <-
 dag <-
   dagify(D ~ VH + MR + AP,
          AI ~ VH + MR ,
-         AP ~ AI,
          coords = dag_coords)
 
 # plot 
@@ -497,6 +515,7 @@ Q2.2.) Redesign your analysis following the graph and report how the results cha
 ```{r}
 ################## CREATING A NEW MULTIPLE MODEL WITH ALL PREDICTORS ######################
 ################### VoiceHearing + MindReading #############################
+# GUSTAV
 
 # Fitting the models ------------------------------------------------------------------------------
 
@@ -521,6 +540,8 @@ posterior_summary(updated_m0) %>% round(digits = 2)
 
 ```{r, fig.height = 2.5, fig.width = 7}
 ################## PLOTTING ###############
+# SIGRID
+
 color_scheme_set("orange")
 
 mcmc_plot(updated_m0, 
@@ -537,6 +558,8 @@ mcmc_plot(updated_m0,
 
 ```{r}
 # MORE PLOTTING
+# ANDERS
+
 post_updated_m0 <- posterior_samples(updated_m0)
 
 post_updated_m0 %>% 
@@ -576,50 +599,50 @@ Q3.2) OPTIONAL: is this a general pattern? Try varying the parameters (e.g. corr
 
 
 ```{r}
-# #pacman::p_load(MASS, tidyverse, psych)
-# 
-# seed <- 1981 # Defining a seed so the results are always the same
-# n <- 300 # Defining the amount of participants
-# 
-# SymptomCorr <- .2 # Defining the correlation of symptoms (as they tend to co-occur)
-# EffectCorrRel <- .2 # Defining the correlation between relevant symptoms and effect (Some symptoms are positively correlated with the effect)
-# EffectCorrIrrel <- 0 # Defining the correlation between irrelevant symptoms and effect (none)
-# 
-# # Creating the variance-covariance matrix for the variables we want to generate (3 symptoms, 1 effect)
-# Sigma <- matrix(data=c(1,SymptomCorr,SymptomCorr,EffectCorrRel,
-#                        SymptomCorr,1,SymptomCorr,EffectCorrRel,
-#                        SymptomCorr,SymptomCorr,1,EffectCorrIrrel,
-#                        EffectCorrRel,EffectCorrRel,EffectCorrIrrel,1),
-#                        nrow=4,ncol=4)
-# 
-# ## Generate data from a multivariate (mvr) normal (n) distribution
-# d <- mvrnorm(n = n, # number of participant
-#         mu = c(1.2, 1.2, 1.2, 4), # mean of each variable
-#         Sigma) # variance co-variance matrix
-# 
-# # Giving meaningful names to variables and add ID
-# d <- data.frame(
-#   VoiceHearing = d[,1], 
-#   MindReading =  d[,2],
-#   Apathy =  d[,3], 
-#   AltercentricIntrusion = d[,4],
-#   ID = seq(nrow(d)))
-# 
-# # Assessing whether the participant has schizophrenia (high enough sum of symptoms)
-# # Here we choose participants scoring above 75% percentile (the most severe ones)
-# d$Diagnosis <- 0
-# d$Diagnosis[(d$VoiceHearing + d$MindReading + d$Apathy) > 
-#               quantile(d$VoiceHearing + d$MindReading + d$Apathy, .75)] <- 1
-# 
-# ## Plotting the relation between variables all participants
-# pairs.panels(dplyr::select(d,-Diagnosis, -ID))
-# 
-# 
-# ## Plotting the relation between variables in schizophrenia
-# d1 <- d %>% subset(Diagnosis==1) %>% dplyr::select(-Diagnosis, -ID)
-# pairs.panels(d1)
-# 
-# 
-# write_csv(d, "data/Ass2.csv")
+pacman::p_load(MASS, tidyverse, psych)
+
+seed <- 1981 # Defining a seed so the results are always the same
+n <- 300 # Defining the amount of participants
+
+SymptomCorr <- .2 # Defining the correlation of symptoms (as they tend to co-occur)
+EffectCorrRel <- .2 # Defining the correlation between relevant symptoms and effect (Some symptoms are positively correlated with the effect)
+EffectCorrIrrel <- 0 # Defining the correlation between irrelevant symptoms and effect (none)
+
+# Creating the variance-covariance matrix for the variables we want to generate (3 symptoms, 1 effect)
+Sigma <- matrix(data=c(1,SymptomCorr,SymptomCorr,EffectCorrRel,
+                       SymptomCorr,1,SymptomCorr,EffectCorrRel,
+                       SymptomCorr,SymptomCorr,1,EffectCorrIrrel,
+                       EffectCorrRel,EffectCorrRel,EffectCorrIrrel,1),
+                       nrow=4,ncol=4)
+
+## Generate data from a multivariate (mvr) normal (n) distribution
+d <- mvrnorm(n = n, # number of participant
+        mu = c(1.2, 1.2, 1.2, 4), # mean of each variable
+        Sigma) # variance co-variance matrix
+
+# Giving meaningful names to variables and add ID
+d <- data.frame(
+  VoiceHearing = d[,1],
+  MindReading =  d[,2],
+  Apathy =  d[,3],
+  AltercentricIntrusion = d[,4],
+  ID = seq(nrow(d)))
+
+# Assessing whether the participant has schizophrenia (high enough sum of symptoms)
+# Here we choose participants scoring above 75% percentile (the most severe ones)
+d$Diagnosis <- 0
+d$Diagnosis[(d$VoiceHearing + d$MindReading + d$Apathy) >
+              quantile(d$VoiceHearing + d$MindReading + d$Apathy, .75)] <- 1
+
+## Plotting the relation between variables all participants
+pairs.panels(dplyr::select(d,-Diagnosis, -ID))
+
+
+## Plotting the relation between variables in schizophrenia
+d1 <- d %>% subset(Diagnosis==1) %>% dplyr::select(-Diagnosis, -ID)
+pairs.panels(d1)
+
+
+#write_csv(d, "data/Ass2.csv")
 ```
 

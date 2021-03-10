@@ -248,8 +248,50 @@ So far: Both predictors have SD's almosts as big as their beta-estimates and the
 ## Second part
 
 Q2.1) However, we know that the diagnosis is based on symptom assessment: if the overall sum of symptoms is severe enough, the participant gets a diagnosis. In other words, by selecting the patients, and including the symptoms in the model we might have inadvertently introduced an issue in our inference. Do try to draw a causal graph (Directed Acyclical Graph) of the variables and compare it with the types of causal graphs presented in the slides. Discuss which biases you might have introduced.
+---------------
+Post-treatment bias because the diagnosis is a cause of the symptoms' severity (the perplexing pipe)
+Collider bars bias?
+---------------
+```{r}
+library(ggdag, tidyverse)
+
+set.seed(5)
+
+dagify(AI ~ MR + VH,
+       D ~ MR + VH + AP
+       ) %>%
+  ggdag(node_size = 8)
+
+```
+
+```{r}
+
+dag_coords <-
+  tibble(name = c("VH", "D", "MR", "AI", "AP"),
+         x    = c(1, 2, 3, 2, 2),
+         y    = c(2, 2, 2, 1, 2))
+
+dagify(AI ~ MR + VH,
+       D ~ MR + VH + AP,
+       coords = dag_coords) %>%
+  
+  ggplot(aes(x = x, y = y, xend = xend, yend = yend)) +
+  geom_dag_point(aes(color = name == "D"),
+                 alpha = 1/2, size = 6.5, show.legend = F) +
+  geom_point(x = 2, y = 2, 
+             size = 6.5, shape = 1, stroke = 1, color = "orange") +
+  geom_dag_text(color = "black") +
+  geom_dag_edges() +
+  scale_color_manual(values = c("steelblue", "orange")) +
+  scale_x_continuous(NULL, breaks = NULL, expand = c(.1, .1)) +
+  scale_y_continuous(NULL, breaks = NULL, expand = c(.1, .1))
+```
 
 Q2.2.) Redesign your analysis following the graph and report how the results change
+
+```{r}
+AI ~ VH + MR ?
+```
 
 
 ## Third part
