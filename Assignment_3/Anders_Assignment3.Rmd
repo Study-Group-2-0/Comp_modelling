@@ -145,7 +145,7 @@ Step 2: Analyse pitch variability in ASD in two new studies for which you have a
 - the data is available as Ass3_data.csv. Notice there are 2 studies (language us, and language dk), multiple trials per participant, and a few different ways to measure pitch variability (if in doubt, focus on pitch IQR, interquartile range of the log of fundamental frequency)
 - Also, let's standardize the data, so that they are compatible with our meta-analytic prior (Cohen's d is measured in SDs).
 ```{r}
-
+################################################ READING DATA AND INSPECTING #########################################################
 #reading data and scaling Pitch_IQR
 df <- read_csv("Ass3_data.csv") %>% 
   mutate(
@@ -187,14 +187,16 @@ Step 3: Build a regression model predicting Pitch variability from Diagnosis.
 - use a skeptical/conservative prior for the effects of diagnosis. Remember you'll need to motivate it, test its predictions (prior predictive checks), its impact on the posteriors (prior posterior updates checks).
 ```{r}
 ######################################### MODELLING PITCH VARIABILITY FROM DIAGNOSIS #################################################
+####################################### DEFINING MODEL AND MAKING PRIOR-PREDICTIVE CHECKS ############################################
 
 #defining formula with 0 a intercept and random effects for ID and Language
-f1_no_meta <- bf(Pitch_IQR ~ 1 + Diagnosis)
+f1_no_meta <- bf(Pitch_IQR ~ 0 + Diagnosis)
 
 #checking out priors
 get_prior(f1_no_meta, data = df)
 
-#defining priors. Pitch_IQR can only be positive, i.e. we cant have negative Pitch_IQR. 
+#defining priors???????
+#Pitch_IQR can only be positive, i.e. we cant have negative Pitch_IQR. 
 prior_no_meta <- c(
   prior(exp(0,1), class = Intercept),
   prior(normal(0,0.5), class = sigma),
@@ -214,16 +216,17 @@ m1_no_meta_prior <- brm(
   file = here("Assignment_3", "models_anders", "m1_no_meta_prior")
 
 )
-#this gives all sorts of warnings
+
 
 #doing prior_predictive checks
 pp_check(m1_no_meta_prior, nsamples = 100)
-#they seem fine.
+
 ```
 
 
 ```{r}
-############################################### RUNNING FULL MODEL ############################
+######################################### MODELLING PITCH VARIABILITY FROM DIAGNOSIS #################################################
+############################################### RUNNING THE MODEL WITH DATA  ########################################################
 #running the brm with the data
 m1_no_meta <- brm(
   formula = f1_no_meta,
