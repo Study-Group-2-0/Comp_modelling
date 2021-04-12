@@ -116,7 +116,7 @@ m0_meta <- brm(
 pp_check(m0_meta, nsamples = 100)
 #they seem fine.
 
-#checkingt the chains. They seem good.
+#checking the chains. They seem good.
 plot(m0_meta)
 
 #checking the output
@@ -149,7 +149,7 @@ Step 2: Analyse pitch variability in ASD in two new studies for which you have a
 #reading data and scaling Pitch_IQR
 df <- read_csv("Ass3_data.csv") %>% 
   mutate(
-    Pitch_IQR = scale(Pitch_IQR, center = FALSE),
+    Pitch_IQR = scale(Pitch_IQR),
     ID = as.factor(ID),
     Language = as.factor(Language),
     Diagnosis = as.factor(Diagnosis)
@@ -185,71 +185,293 @@ Step 3: Build a regression model predicting Pitch variability from Diagnosis.
 - how is the outcome distributed? (likelihood function). NB. given we are standardizing, and the meta-analysis is on that scale, gaussian is not a bad assumption, but check t-student as well.  Lognormal would require us to convert the prior to that scale.
 - how are the parameters of the likelihood distribution distributed? Which predictors should they be conditioned on? Start simple, with Diagnosis only. Add other predictors only if you have the time and energy!
 - use a skeptical/conservative prior for the effects of diagnosis. Remember you'll need to motivate it, test its predictions (prior predictive checks), its impact on the posteriors (prior posterior updates checks).
+- Evaluate model quality. Describe and plot the estimates. 
 ```{r}
 ######################################### MODELLING PITCH VARIABILITY FROM DIAGNOSIS #################################################
+###################################################### WITHOUT META-ANALYSIS #########################################################
 ####################################### DEFINING MODEL AND MAKING PRIOR-PREDICTIVE CHECKS ############################################
 
+
 #defining formula with 0 a intercept and random effects for ID and Language
-f1_no_meta <- bf(Pitch_IQR ~ 0 + Diagnosis)
+f1 <- bf(Pitch_IQR ~ 1 + Diagnosis + (1 | ID))
 
 #checking out priors
 get_prior(f1_no_meta, data = df)
 
-#defining priors???????
-#Pitch_IQR can only be positive, i.e. we cant have negative Pitch_IQR. 
+#defining priors
 prior_no_meta <- c(
-  prior(exp(0,1), class = Intercept),
-  prior(normal(0,0.5), class = sigma),
-  prior(normal(0,0.2), class = b, coef = DiagnosisTD)
+  prior(normal(0,1), class = Intercept),
+  prior(normal(0,1), class = sigma),
+  prior(normal(0,0.2), class = b),
+  prior(normal(0, 0.5), class = sd)
 )
 
 
 #running the brm with priors only
 m1_no_meta_prior <- brm(
-  formula = f1_no_meta,
+  formula = f1,
   data = df,
   family = gaussian(),
   prior = prior_no_meta, 
   sample_prior = "only",
-  chains = 2,
-  cores = 2,
+  chains = 1,
+  cores = 1,
   file = here("Assignment_3", "models_anders", "m1_no_meta_prior")
-
-)
+  )
 
 
 #doing prior_predictive checks
 pp_check(m1_no_meta_prior, nsamples = 100)
-
+#laekker prior
 ```
 
 
 ```{r}
 ######################################### MODELLING PITCH VARIABILITY FROM DIAGNOSIS #################################################
+###################################################### WITHOUT META-ANALYSIS #########################################################
 ############################################### RUNNING THE MODEL WITH DATA  ########################################################
 #running the brm with the data
 m1_no_meta <- brm(
-  formula = f1_no_meta,
+  formula = f1,
   data = df,
   family = gaussian(),
   prior = prior_no_meta, 
   sample_prior = T,
-  chains = 2,
-  cores = 2,
+  iter = 2000,
+  control = list(adapt_delta = 0.99, max_treedepth = 20),
+  chains = 4, #change to 1 if it is the first round
+  cores = 4, #changer to 1 if it is the first round
   file = here("Assignment_3", "models_anders", "m1_no_meta_full")
-
 )
 
+#----------------------------------Diagnostics----------------------------------
+#No warnings
+
+#Diagnostics
+print(m1_no_meta)
+#There is a good amount of EES
+#Rhat is 1 for all but Intercept, for which it is 1.01
+
+#Checking the chains
+plot(m1_no_meta)
+#Catterpillars look damn fine
+
+#----------------------------------predictive-checks----------------------------
 #doing posterior-predictive checks
 pp_check(m1_no_meta, nsamples = 100)
-#they seem fine.
+#Gaussian is maybe not best fit, but works quite fine anyways
 
-#checkingt the chains. They seem good.
-plot(m1_no_meta)
+#maybe use these???
+conditional_effects(m1_no_meta)
+plot(conditional_effects(m1_no_meta, spaghetti=T, 
+                         method="fitted", nsamples=100), points=T)
+plot(conditional_effects(m1_no_meta, spaghetti=T, 
+                         method="predict", nsamples=100), points=T)
 
-#checking the output
-summary(m1_no_meta)
+#---------------------------------prior-posterior update------------------------
+#Prior posterior update checks
+m1_samples <- posterior_samples(m1_no_meta)
+m1_samples %>% 
+  select(c("b_Intercept", "b_DiagnosisTD", "sigma", "prior_Intercept", "prior_b", "prior_sigma")) %>% 
+  rename(
+    b_sigma = sigma,
+    prior_DiagnosisTD = prior_b) %>% 
+  pivot_longer(cols = everything(),
+               values_to = "value",
+               names_to = "distribution"
+               ) %>% 
+  separate(distribution, c("Distribution", "Parameter"), sep = "_") %>% 
+  mutate(Distribution = ifelse(Distribution == "b", "Posterior", "Prior")) %>% 
+  ggplot(aes(x = value, fill = Distribution)) + 
+  geom_density(alpha = 0.8) +
+  facet_wrap(~Parameter, nrow = 1) +
+  labs(title = "Posterior update from priors")+
+  theme_bw()+
+  theme(strip.text = element_text(size=15),
+        axis.title=element_text(size=15),
+        plot.title = element_text(size = 20, face = "bold", hjust = 0.5))
 
+#looking gooood
+
+#looking closer at diagnosis
+m1_samples %>% 
+  ggplot() +
+  geom_density(aes(prior_b), fill="red", alpha=0.3) +
+  geom_density(aes(b_DiagnosisTD), fill="blue", alpha=0.3)
+
+#------------------------------------influential data points and LOO------------
+#check for influential data-points
+m1_no_meta <- add_criterion(m1_no_meta, "loo", reloo = T)
+#5 problematic observation(s) found.
+#The model will be refit 5 times.
+
+plot(loo(m1_no_meta))
+#How to look at this plot?
+
+#below are riccardo notes
+# If deviant observations check them in the dataset, are they odd?
+# Often deviant observation tell us something important:
+## Should we use a different likelihood? e.g. robust regression?
+## Should we relax our priors for variation?
+## Are there errors in the data?
+
+
+#-----------------------------------Results-------------------------------------
+#checking the output of the model
+print(m1_no_meta)
+mcmc_plot(m1_no_meta) +
+  theme(axis.text.y = element_text(hjust = 0))
+
+
+#test your hypotheses
+hypothesis(m1_no_meta, "DiagnosisTD < 0")
+plot(hypothesis(m1_no_meta, "DiagnosisTD < 0"))
+#How to interpret all these numbers?
+
+
+
+```
+
+Step 4: Now re-run the model with the meta-analytic prior
+- Evaluate model quality. Describe and plot the estimates. 
+- N.B. you need to assess the meta-analytic informed prior (prior pred checks, prior-posterior update checks) and if relevant you can always change it in motivated ways (e.g. too confident, doesn't let the model actually learn from the data, so increase sd)
+```{r}
+######################################### MODELLING PITCH VARIABILITY FROM DIAGNOSIS #################################################
+###################################################### WITH META-ANALYSIS #########################################################
+####################################### DEFINING MODEL AND MAKING PRIOR-PREDICTIVE CHECKS ############################################
+
+
+#defining priors for the meta model. Here we use the results from the meta-analys to inform priors.
+#we use meta_mean and meta_sd. Should we also use meta_heterogeniety?
+prior_meta <- c(
+  prior(normal(0,1), class = Intercept),
+  prior(normal(0,1), class = sigma),
+  prior(normal(-0.46, 0.11), class = b),
+  prior(normal(0, 0.5), class = sd)
+)
+
+
+#running the brm with priors only
+m1_meta_prior <- brm(
+  formula = f1,
+  data = df,
+  family = gaussian(),
+  prior = prior_meta, 
+  sample_prior = "only",
+  chains = 1,
+  cores = 1,
+  file = here("Assignment_3", "models_anders", "m1_meta_prior")
+  )
+
+
+#doing prior_predictive checks
+pp_check(m1_meta_prior, nsamples = 100)
+#priors look the same as no_meta_model because we have only changed priors for b.
+```
+```{r}
+######################################### MODELLING PITCH VARIABILITY FROM DIAGNOSIS #################################################
+###################################################### WITH META-ANALYSIS #########################################################
+############################################### RUNNING THE MODEL WITH DATA  ########################################################
+
+#running the brm with the data
+m1_meta <- brm(
+  formula = f1,
+  data = df,
+  family = gaussian(),
+  prior = prior_meta, 
+  sample_prior = T,
+  iter = 2000,
+  control = list(adapt_delta = 0.99, max_treedepth = 20),
+  chains = 4, #change to 1 if it is the first round
+  cores = 4, #changer to 1 if it is the first round
+  file = here("Assignment_3", "models_anders", "m1_meta_full")
+)
+
+#------------------------------------diagnostics--------------------------------
+#No warnings
+
+print(m1_meta)
+#There is a good amount of EES
+#Rhat is 1 for all 
+
+#Checking the chains
+plot(m1_meta)
+#Catterpillars look damn fine
+
+
+#---------------------------------predictive-checks-----------------------------
+#doing posterior-predictive checks
+pp_check(m1_meta, nsamples = 100)
+#Gaussian is maybe not best fit, but works quite fine anyways
+
+#maybe use these???
+conditional_effects(m1_meta)
+plot(conditional_effects(m1_meta, spaghetti=T, 
+                         method="fitted", nsamples=100), points=T)
+plot(conditional_effects(m1_meta, spaghetti=T, 
+                         method="predict", nsamples=100), points=T)
+
+
+#--------------------------------prior-posterior-update-------------------------
+#Prior posterior update checks
+m1_samples_meta <- posterior_samples(m1_meta)
+m1_samples_meta %>% 
+  select(c("b_Intercept", "b_DiagnosisTD", "sigma", "prior_Intercept", "prior_b", "prior_sigma")) %>% 
+  rename(
+    b_sigma = sigma,
+    prior_DiagnosisTD = prior_b) %>% 
+  pivot_longer(cols = everything(),
+               values_to = "value",
+               names_to = "distribution"
+               ) %>% 
+  separate(distribution, c("Distribution", "Parameter"), sep = "_") %>% 
+  mutate(Distribution = ifelse(Distribution == "b", "Posterior", "Prior")) %>% 
+  ggplot(aes(x = value, fill = Distribution)) + 
+  geom_density(alpha = 0.8) +
+  facet_wrap(~Parameter, nrow = 1) +
+  labs(title = "Posterior update from priors")+
+  theme_bw()+
+  theme(strip.text = element_text(size=15),
+        axis.title=element_text(size=15),
+        plot.title = element_text(size = 20, face = "bold", hjust = 0.5))
+
+#looking gooood
+
+#getting a better look at diagnosis
+m1_samples_meta %>% 
+  ggplot() +
+  geom_density(aes(prior_b), fill="red", alpha=0.3) +
+  geom_density(aes(b_DiagnosisTD), fill="blue", alpha=0.3)
+#prior is pushing a ton
+
+#------------------------------influential data points and LOO------------------
+#check for influential data-points
+m1_no_meta <- add_criterion(m1_meta, "loo", reloo = T)
+ #5 problematic observation(s) found.
+#The model will be refit 5 times.
+
+plot(loo(m1_meta))
+#How to look at this plot?
+
+#below are riccardo notes
+# If deviant observations check them in the dataset, are they odd?
+# Often deviant observation tell us something important:
+## Should we use a different likelihood? e.g. robust regression?
+## Should we relax our priors for variation?
+## Are there errors in the data?
+
+
+#--------------------------------Results----------------------------------------
+#checking the output of the model
+print(m1_meta)
+mcmc_plot(m1_meta) +
+  theme(axis.text.y = element_text(hjust = 0))
+
+
+#test your hypotheses
+hypothesis(m1_meta, "DiagnosisTD < 0")
+plot(hypothesis(m1_meta, "DiagnosisTD < 0"))
+#How to interpret all these numbers?
 
 
 
@@ -257,14 +479,13 @@ summary(m1_no_meta)
 
 
 
-- Evaluate model quality. Describe and plot the estimates. 
-
-Step 4: Now re-run the model with the meta-analytic prior
-- Evaluate model quality. Describe and plot the estimates. 
-- N.B. you need to assess the meta-analytic informed prior (prior pred checks, prior-posterior update checks) and if relevant you can always change it in motivated ways (e.g. too confident, doesn't let the model actually learn from the data, so increase sd)
-
 Step 5: Compare the models
 - Plot priors and posteriors of the diagnosis effect in both models
+```{r}
+
+```
+
+
 - Compare posteriors between the two models
 - Compare the two models (LOO)
 - Discuss how they compare and whether any of them is best.
