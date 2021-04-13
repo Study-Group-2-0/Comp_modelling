@@ -19,12 +19,12 @@ The questions you need to answer are: What are the consequences of using a meta-
 Discuss the role that meta-analytic priors should have in scientific practice. Should we systematically use them? Do they have drawbacks? Should we use them to complement more conservative approaches? How does the use of meta-analytic priors you suggest reflect the skeptical and cumulative nature of science?
 
 ```{r}
-pacman::p_load(tidyverse, brms, metafor, here)
+pacman::p_load(tidyverse, brms, metafor, here, patchwork)
 ```
 
 
-### Step by step suggestions
 
+# Meta analysis
 Step 1: Perform a meta-analysis of pitch variability from previous studies of voice in ASD
 - N.B. all you need is in the two intro videos
 - the data is available as Ass3_MetaAnalysisData.tsv
@@ -140,7 +140,7 @@ meta_hetero <- 0.35
 ```
 
 
-
+# Loading and inspecting the data 
 Step 2: Analyse pitch variability in ASD in two new studies for which you have access to all the trials (not just study level estimates)
 - the data is available as Ass3_data.csv. Notice there are 2 studies (language us, and language dk), multiple trials per participant, and a few different ways to measure pitch variability (if in doubt, focus on pitch IQR, interquartile range of the log of fundamental frequency)
 - Also, let's standardize the data, so that they are compatible with our meta-analytic prior (Cohen's d is measured in SDs).
@@ -163,6 +163,7 @@ summary(df$Pitch_IQR)
 ggplot(df, aes(x = Pitch_IQR)) + 
   geom_density()
 ```
+
 - Is there any structure in the dataset that we should account for with random/varying effects? How would you implement that? Or, if you don't know how to do bayesian random/varying effects or don't want to bother, is there anything we would need to simplify in the dataset?
 ```{r}
 #checking out ID-coloumn
@@ -175,47 +176,63 @@ ID_us <- df %>% filter(Language == "us") %>% summarize(levels(ID)) %>%
   mutate(
     row = as.factor(row_number())
   )
+
 # it seems that the ID's in both studies (dk and us) are identical. WEIRD. 
 # we will make random effects on ID and Language
 
 ```
 
 
+#Building regression models
+--------------------------------------------------------------------------------
+We want to build the 2 following regression models:
+m1: Pitch_IQR ~ 1 + Diagnosis + (1 | ID)
+m2: PITCH_IQR ~ 1 + Language + Language:Diagnosis + (1 | Language/ID)
+
+The following chunks are going to be structured like this:
+1) Building M1 without meta analysis priors
+2) Building M1 with meta-analysis priors
+3) Building M2 without meta-analysis priors
+4) Building M2 with meta-analysis-priors
+5) Model comparison
+--------------------------------------------------------------------------------
+
+## M1 Without meta-analysis priors
 Step 3: Build a regression model predicting Pitch variability from Diagnosis.
 - how is the outcome distributed? (likelihood function). NB. given we are standardizing, and the meta-analysis is on that scale, gaussian is not a bad assumption, but check t-student as well.  Lognormal would require us to convert the prior to that scale.
 - how are the parameters of the likelihood distribution distributed? Which predictors should they be conditioned on? Start simple, with Diagnosis only. Add other predictors only if you have the time and energy!
 - use a skeptical/conservative prior for the effects of diagnosis. Remember you'll need to motivate it, test its predictions (prior predictive checks), its impact on the posteriors (prior posterior updates checks).
 - Evaluate model quality. Describe and plot the estimates. 
+
 ```{r}
-######################################### MODELLING PITCH VARIABILITY FROM DIAGNOSIS #################################################
-###################################################### WITHOUT META-ANALYSIS #########################################################
+####################################################### M1 WITHOUT META-ANALYSIS #####################################################
 ####################################### DEFINING MODEL AND MAKING PRIOR-PREDICTIVE CHECKS ############################################
 
 
-#defining formula with 0 a intercept and random effects for ID and Language
+#defining formula with Diagnosis and varying intercept for ID
 f1 <- bf(Pitch_IQR ~ 1 + Diagnosis + (1 | ID))
 
 #checking out priors
-get_prior(f1_no_meta, data = df)
+get_prior(f1, data = df)
 
 #defining priors
-prior_no_meta <- c(
+m1_no_meta_priors <- c(
   prior(normal(0,1), class = Intercept),
-  prior(normal(0,1), class = sigma),
+  prior(exponential(1), class = sigma),
   prior(normal(0,0.2), class = b),
-  prior(normal(0, 0.5), class = sd)
+  prior(normal(0, 0.8), class = sd)
 )
-
 
 #running the brm with priors only
 m1_no_meta_prior <- brm(
   formula = f1,
   data = df,
   family = gaussian(),
-  prior = prior_no_meta, 
+  prior = m1_no_meta_priors, 
   sample_prior = "only",
   chains = 1,
   cores = 1,
+  backend = "cmdstanr",
   file = here("Assignment_3", "models_anders", "m1_no_meta_prior")
   )
 
@@ -227,20 +244,21 @@ pp_check(m1_no_meta_prior, nsamples = 100)
 
 
 ```{r}
-######################################### MODELLING PITCH VARIABILITY FROM DIAGNOSIS #################################################
-###################################################### WITHOUT META-ANALYSIS #########################################################
-############################################### RUNNING THE MODEL WITH DATA  ########################################################
+####################################################### M1 WITHOUT META-ANALYSIS #####################################################
+############################################### RUNNING THE MODEL WITH DATA  #########################################################
+
 #running the brm with the data
 m1_no_meta <- brm(
   formula = f1,
   data = df,
   family = gaussian(),
-  prior = prior_no_meta, 
+  prior = m1_no_meta_priors, 
   sample_prior = T,
   iter = 2000,
   control = list(adapt_delta = 0.99, max_treedepth = 20),
   chains = 4, #change to 1 if it is the first round
   cores = 4, #changer to 1 if it is the first round
+  backend = "cmdstanr",
   file = here("Assignment_3", "models_anders", "m1_no_meta_full")
 )
 
@@ -250,7 +268,7 @@ m1_no_meta <- brm(
 #Diagnostics
 print(m1_no_meta)
 #There is a good amount of EES
-#Rhat is 1 for all but Intercept, for which it is 1.01
+#Rhat is 1.1 for DiagnosisTD and sd(intercept)
 
 #Checking the chains
 plot(m1_no_meta)
@@ -258,7 +276,8 @@ plot(m1_no_meta)
 
 #----------------------------------predictive-checks----------------------------
 #doing posterior-predictive checks
-pp_check(m1_no_meta, nsamples = 100)
+pp1 <- pp_check(m1_no_meta, nsamples = 100)
+pp1
 #Gaussian is maybe not best fit, but works quite fine anyways
 
 #maybe use these???
@@ -270,8 +289,8 @@ plot(conditional_effects(m1_no_meta, spaghetti=T,
 
 #---------------------------------prior-posterior update------------------------
 #Prior posterior update checks
-m1_samples <- posterior_samples(m1_no_meta)
-m1_samples %>% 
+m1_no_meta_samples <- posterior_samples(m1_no_meta)
+m1_no_meta_samples %>% 
   select(c("b_Intercept", "b_DiagnosisTD", "sigma", "prior_Intercept", "prior_b", "prior_sigma")) %>% 
   rename(
     b_sigma = sigma,
@@ -285,25 +304,38 @@ m1_samples %>%
   ggplot(aes(x = value, fill = Distribution)) + 
   geom_density(alpha = 0.8) +
   facet_wrap(~Parameter, nrow = 1) +
-  labs(title = "Posterior update from priors")+
+  labs(title = "Prior-posterior updates in M1 without meta-analytic priors")+
   theme_bw()+
   theme(strip.text = element_text(size=15),
         axis.title=element_text(size=15),
-        plot.title = element_text(size = 20, face = "bold", hjust = 0.5))
+        plot.title = element_text(size = 15, face = "bold", hjust = 0.5))
 
-#looking gooood
 
 #looking closer at diagnosis
-m1_samples %>% 
-  ggplot() +
-  geom_density(aes(prior_b), fill="red", alpha=0.3) +
-  geom_density(aes(b_DiagnosisTD), fill="blue", alpha=0.3)
-
+#getting a better look at diagnosis
+D1 <- m1_no_meta_samples %>% 
+  select(c("b_DiagnosisTD", "prior_b",)) %>% 
+  rename(
+    prior_DiagnosisTD = prior_b) %>% 
+  pivot_longer(cols = everything(),
+               values_to = "value",
+               names_to = "distribution"
+               ) %>% 
+  separate(distribution, c("Distribution", "Parameter"), sep = "_") %>% 
+  mutate(Distribution = ifelse(Distribution == "b", "Posterior", "Prior")) %>% 
+  ggplot(aes(x = value, fill = Distribution)) + 
+  geom_density(alpha = 0.8) +
+  facet_wrap(~Parameter, nrow = 1) +
+  labs(title = "Prior-posterior updates for Diagnosis in M1 without meta-analytic priors")+
+  theme_bw()+
+  theme(strip.text = element_text(size=15),
+        axis.title=element_text(size=15),
+        plot.title = element_text(size = 12, face = "bold", hjust = 0.5))
+D1
 #------------------------------------influential data points and LOO------------
 #check for influential data-points
 m1_no_meta <- add_criterion(m1_no_meta, "loo", reloo = T)
-#5 problematic observation(s) found.
-#The model will be refit 5 times.
+#2 problematic observation(s) found.
 
 plot(loo(m1_no_meta))
 #How to look at this plot?
@@ -327,63 +359,60 @@ mcmc_plot(m1_no_meta) +
 hypothesis(m1_no_meta, "DiagnosisTD < 0")
 plot(hypothesis(m1_no_meta, "DiagnosisTD < 0"))
 #How to interpret all these numbers?
-
-
-
 ```
 
+## M1 With meta-analysis priors
 Step 4: Now re-run the model with the meta-analytic prior
 - Evaluate model quality. Describe and plot the estimates. 
 - N.B. you need to assess the meta-analytic informed prior (prior pred checks, prior-posterior update checks) and if relevant you can always change it in motivated ways (e.g. too confident, doesn't let the model actually learn from the data, so increase sd)
 ```{r}
-######################################### MODELLING PITCH VARIABILITY FROM DIAGNOSIS #################################################
-###################################################### WITH META-ANALYSIS #########################################################
+####################################################### M1 WITH META-ANALYSIS ########################################################
 ####################################### DEFINING MODEL AND MAKING PRIOR-PREDICTIVE CHECKS ############################################
-
 
 #defining priors for the meta model. Here we use the results from the meta-analys to inform priors.
 #we use meta_mean and meta_sd. Should we also use meta_heterogeniety?
-prior_meta <- c(
+m1_meta_priors <- c(
   prior(normal(0,1), class = Intercept),
-  prior(normal(0,1), class = sigma),
+  prior(exponential(1), class = sigma),
   prior(normal(-0.46, 0.11), class = b),
-  prior(normal(0, 0.5), class = sd)
+  prior(normal(0, 0.8), class = sd)
 )
-
 
 #running the brm with priors only
 m1_meta_prior <- brm(
   formula = f1,
   data = df,
   family = gaussian(),
-  prior = prior_meta, 
+  prior = m1_meta_priors, 
   sample_prior = "only",
   chains = 1,
   cores = 1,
+  backend = "cmdstanr",
   file = here("Assignment_3", "models_anders", "m1_meta_prior")
   )
 
 
 #doing prior_predictive checks
 pp_check(m1_meta_prior, nsamples = 100)
-#priors look the same as no_meta_model because we have only changed priors for b.
+#priors look the same as m1_no_meta_model because we have only changed priors for b.
 ```
+
 ```{r}
-######################################### MODELLING PITCH VARIABILITY FROM DIAGNOSIS #################################################
-###################################################### WITH META-ANALYSIS #########################################################
-############################################### RUNNING THE MODEL WITH DATA  ########################################################
+####################################################### M1 WITH META-ANALYSIS ########################################################
+############################################### RUNNING THE MODEL WITH DATA  #########################################################
 
 #running the brm with the data
 m1_meta <- brm(
   formula = f1,
   data = df,
   family = gaussian(),
-  prior = prior_meta, 
+  prior = m1_meta_priors, 
   sample_prior = T,
   iter = 2000,
   control = list(adapt_delta = 0.99, max_treedepth = 20),
   chains = 4, #change to 1 if it is the first round
   cores = 4, #changer to 1 if it is the first round
+  backend = "cmdstanr",
   file = here("Assignment_3", "models_anders", "m1_meta_full")
 )
 
@@ -392,7 +421,7 @@ m1_meta <- brm(
 
 print(m1_meta)
 #There is a good amount of EES
-#Rhat is 1 for all 
+#Rhat is 1.1 for sd(intercept)
 
 #Checking the chains
 plot(m1_meta)
@@ -401,7 +430,8 @@ plot(m1_meta)
 
 #---------------------------------predictive-checks-----------------------------
 #doing posterior-predictive checks
-pp_check(m1_meta, nsamples = 100)
+pp2 <- pp_check(m1_meta, nsamples = 100)
+pp2
 #Gaussian is maybe not best fit, but works quite fine anyways
 
 #maybe use these???
@@ -414,8 +444,8 @@ plot(conditional_effects(m1_meta, spaghetti=T,
 
 #--------------------------------prior-posterior-update-------------------------
 #Prior posterior update checks
-m1_samples_meta <- posterior_samples(m1_meta)
-m1_samples_meta %>% 
+m1_meta_samples <- posterior_samples(m1_meta)
+m1_meta_samples %>% 
   select(c("b_Intercept", "b_DiagnosisTD", "sigma", "prior_Intercept", "prior_b", "prior_sigma")) %>% 
   rename(
     b_sigma = sigma,
@@ -429,24 +459,37 @@ m1_samples_meta %>%
   ggplot(aes(x = value, fill = Distribution)) + 
   geom_density(alpha = 0.8) +
   facet_wrap(~Parameter, nrow = 1) +
-  labs(title = "Posterior update from priors")+
+  labs(title = "Prior-posterior updates in M1 with meta-analytic priors")+
   theme_bw()+
   theme(strip.text = element_text(size=15),
         axis.title=element_text(size=15),
-        plot.title = element_text(size = 20, face = "bold", hjust = 0.5))
-
-#looking gooood
+        plot.title = element_text(size = 15, face = "bold", hjust = 0.5))
 
 #getting a better look at diagnosis
-m1_samples_meta %>% 
-  ggplot() +
-  geom_density(aes(prior_b), fill="red", alpha=0.3) +
-  geom_density(aes(b_DiagnosisTD), fill="blue", alpha=0.3)
+D2 <- m1_meta_samples %>% 
+  select(c("b_DiagnosisTD", "prior_b",)) %>% 
+  rename(
+    prior_DiagnosisTD = prior_b) %>% 
+  pivot_longer(cols = everything(),
+               values_to = "value",
+               names_to = "distribution"
+               ) %>% 
+  separate(distribution, c("Distribution", "Parameter"), sep = "_") %>% 
+  mutate(Distribution = ifelse(Distribution == "b", "Posterior", "Prior")) %>% 
+  ggplot(aes(x = value, fill = Distribution)) + 
+  geom_density(alpha = 0.8) +
+  facet_wrap(~Parameter, nrow = 1) +
+  labs(title = "Prior-posterior updates for Diagnosis in M1 with meta-analytic priors")+
+  theme_bw()+
+  theme(strip.text = element_text(size=15),
+        axis.title=element_text(size=15),
+        plot.title = element_text(size = 12, face = "bold", hjust = 0.5))
 #prior is pushing a ton
+D2
 
 #------------------------------influential data points and LOO------------------
 #check for influential data-points
-m1_no_meta <- add_criterion(m1_meta, "loo", reloo = T)
+m1_meta <- add_criterion(m1_meta, "loo", reloo = T)
  #5 problematic observation(s) found.
 #The model will be refit 5 times.
 
@@ -472,25 +515,399 @@ mcmc_plot(m1_meta) +
 hypothesis(m1_meta, "DiagnosisTD < 0")
 plot(hypothesis(m1_meta, "DiagnosisTD < 0"))
 #How to interpret all these numbers?
-
-
-
 ```
 
 
+--------------------------------------------------------------------------------
+Now we continue to m2
+--------------------------------------------------------------------------------
+
+## M2 Without meta-analysis priors
+
+
+```{r}
+####################################################### M2 WITHOUT META-ANALYSIS #####################################################
+####################################### DEFINING MODEL AND MAKING PRIOR-PREDICTIVE CHECKS ############################################
+
+#defining formula with 0 and an interaction and varying intercept for ID by language
+f2 <- bf(Pitch_IQR ~ 0 + Language + Language:Diagnosis + (1|Language/ID))
+
+#checking out priors
+get_prior(f2, data = df)
+
+#defining priors
+m2_no_meta_priors <- c(
+  prior(exponential(1), class = sigma),
+  prior(normal(0, 0.8), class = sd),
+  prior(normal(0,0.2), class = b, coef = Languagedk:DiagnosisTD),
+  prior(normal(0,0.2), class = b, coef = Languageus:DiagnosisTD),
+  prior(normal(0,1), class = b, coef = Languagedk),
+  prior(normal(0,1), class = b, coef = Languageus)
+)
+
+#running the brm with priors only
+m2_no_meta_prior <- brm(
+  formula = f2,
+  data = df,
+  family = gaussian(),
+  prior = m2_no_meta_priors, 
+  sample_prior = "only",
+  chains = 1,
+  cores = 1,
+  backend = "cmdstanr",
+  file = here("Assignment_3", "models_anders", "m2_no_meta_prior")
+  )
+
+
+#doing prior_predictive checks
+pp_check(m2_no_meta_prior, nsamples = 100)
+#laekker prior
+```
+
+
+```{r}
+####################################################### M2 WITHOUT META-ANALYSIS #####################################################
+############################################### RUNNING THE MODEL WITH DATA  #########################################################
+
+#running the brm with the data
+m2_no_meta <- brm(
+  formula = f2,
+  data = df,
+  family = gaussian(),
+  prior = m2_no_meta_priors, 
+  sample_prior = T,
+  iter = 2000,
+  control = list(adapt_delta = 0.99, max_treedepth = 20),
+  chains = 4, #change to 1 if it is the first round
+  cores = 4, #changer to 1 if it is the first round
+  backend = "cmdstanr",
+  file = here("Assignment_3", "models_anders", "m2_no_meta_full")
+)
+
+#----------------------------------Diagnostics----------------------------------
+#No warnings
+
+#Diagnostics
+print(m2_no_meta)
+#There is a good amount of EES
+#Rhat is 1.1 for Languagedk:DiagnosisTD
+
+#Checking the chains
+plot(m2_no_meta)
+#Catterpillars look damn fine
+
+#----------------------------------predictive-checks----------------------------
+#doing posterior-predictive checks
+pp3 <- pp_check(m2_no_meta, nsamples = 100)
+pp3
+#Gaussian is maybe not best fit, but works quite fine anyways
+
+#maybe use these???
+conditional_effects(m2_no_meta)
+plot(conditional_effects(m2_no_meta, spaghetti=T, 
+                         method="fitted", nsamples=100), points=T)
+plot(conditional_effects(m2_no_meta, spaghetti=T, 
+                         method="predict", nsamples=100), points=T)
+
+#---------------------------------prior-posterior update------------------------
+#Prior posterior update checks
+m2_no_meta_samples <- posterior_samples(m2_no_meta)
+m2_no_meta_samples %>% 
+  select(c("b_Languagedk", "b_Languageus", "b_Languagedk:DiagnosisTD", "b_Languageus:DiagnosisTD", "sd_Language__Intercept", "sd_Language:ID__Intercept",
+           "prior_b_Languagedk", "prior_b_Languageus", "prior_b_Languagedk:DiagnosisTD", "prior_b_Languageus:DiagnosisTD", "prior_sd_Language", "prior_sd_Language:ID")) %>% 
+  rename(
+    b_sdLanguage = sd_Language__Intercept,
+    b_sdLanguageID = "sd_Language:ID__Intercept",
+    prior_Languagedk = prior_b_Languagedk,
+    prior_Languageus = prior_b_Languageus,
+    "prior_Languagedk:DiagnosisTD" = "prior_b_Languagedk:DiagnosisTD",
+    "prior_Languageus:DiagnosisTD" = "prior_b_Languageus:DiagnosisTD",
+    prior_sdLanguage = prior_sd_Language,
+    prior_sdLanguageID = "prior_sd_Language:ID"
+  ) %>% 
+  pivot_longer(cols = everything(),
+               values_to = "value",
+               names_to = "distribution"
+               ) %>% 
+  separate(distribution, c("Distribution", "Parameter"), sep = "_") %>% 
+  mutate(Distribution = ifelse(Distribution == "b", "Posterior", "Prior")) %>% 
+  ggplot(aes(x = value, fill = Distribution)) + 
+  geom_density(alpha = 0.8) +
+  facet_wrap(~Parameter, nrow = 4) +
+  labs(title = "Prior-posterior updates in M2 without meta-analytic priors")+
+  theme_bw()+
+  theme(strip.text = element_text(size=15),
+        axis.title=element_text(size=15),
+        plot.title = element_text(size = 15, face = "bold", hjust = 0.5)) + 
+  xlim(-3,3)
+
+
+#taking a closer look at the slopes for Diagnosis in both Languages
+D3 <- m2_no_meta_samples %>% 
+  select(c("b_Languagedk:DiagnosisTD", "b_Languageus:DiagnosisTD", "prior_b_Languagedk:DiagnosisTD", "prior_b_Languageus:DiagnosisTD")) %>% 
+  rename(
+    "prior_Languagedk:DiagnosisTD" = "prior_b_Languagedk:DiagnosisTD",
+    "prior_Languageus:DiagnosisTD" = "prior_b_Languageus:DiagnosisTD",
+  ) %>% 
+  pivot_longer(cols = everything(),
+               values_to = "value",
+               names_to = "distribution"
+               ) %>% 
+  separate(distribution, c("Distribution", "Parameter"), sep = "_") %>% 
+  mutate(Distribution = ifelse(Distribution == "b", "Posterior", "Prior")) %>% 
+  ggplot(aes(x = value, fill = Distribution)) + 
+  geom_density(alpha = 0.8) +
+  facet_wrap(~Parameter, nrow = ) +
+  labs(title = "Prior-posterior updates for Diagnosis in M2 without meta-analytic priors")+
+  theme_bw()+
+  theme(strip.text = element_text(size=15),
+        axis.title=element_text(size=15),
+        plot.title = element_text(size = 12, face = "bold", hjust = 0.5)) 
+
+D3
+#------------------------------------influential data points and LOO------------
+#check for influential data-points
+m2_no_meta <- add_criterion(m2_no_meta, "loo", reloo = T)
+#3 problematic observation(s) found.
+
+plot(loo(m2_no_meta))
+#How to look at this plot?
+
+#below are riccardo notes
+# If deviant observations check them in the dataset, are they odd?
+# Often deviant observation tell us something important:
+## Should we use a different likelihood? e.g. robust regression?
+## Should we relax our priors for variation?
+## Are there errors in the data?
+
+
+#-----------------------------------Results-------------------------------------
+#checking the output of the model
+print(m2_no_meta)
+mcmc_plot(m2_no_meta) +
+  theme(axis.text.y = element_text(hjust = 0))
+
+
+#test your hypotheses
+hypothesis(m2_no_meta, "Languagedk:DiagnosisTD < 0")
+plot(hypothesis(m2_no_meta, "Languagedk:DiagnosisTD < 0"))
+
+hypothesis(m2_no_meta, "Languageus:DiagnosisTD < 0")
+plot(hypothesis(m2_no_meta, "Languageus:DiagnosisTD < 0"))
+#How to interpret all these numbers?
+```
+
+## M2 With meta-analysis priors
+Step 4: Now re-run the model with the meta-analytic prior
+- Evaluate model quality. Describe and plot the estimates. 
+- N.B. you need to assess the meta-analytic informed prior (prior pred checks, prior-posterior update checks) and if relevant you can always change it in motivated ways (e.g. too confident, doesn't let the model actually learn from the data, so increase sd)
+```{r}
+####################################################### M2 WITH META-ANALYSIS ########################################################
+####################################### DEFINING MODEL AND MAKING PRIOR-PREDICTIVE CHECKS ############################################
+
+#defining priors
+m2_meta_priors <- c(
+  prior(exponential(1), class = sigma),
+  prior(normal(0, 0.8), class = sd), ##### put heterogenoiety here?
+  prior(normal(-0.46,0.11), class = b, coef = Languagedk:DiagnosisTD),
+  prior(normal(-0.46,0.11), class = b, coef = Languageus:DiagnosisTD),
+  prior(normal(0.25,1), class = b, coef = Languagedk),
+  prior(normal(0.25,1), class = b, coef = Languageus)
+)
+
+#running the brm with priors only
+m2_meta_prior <- brm(
+  formula = f2,
+  data = df,
+  family = gaussian(),
+  prior = m2_meta_priors, 
+  sample_prior = "only",
+  chains = 1,
+  cores = 1,
+  backend = "cmdstanr",
+  file = here("Assignment_3", "models_anders", "m2_meta_prior")
+)
+
+#doing prior_predictive checks
+pp_check(m2_meta_prior, nsamples = 100)
+# laekker prior
+```
+
+```{r}
+####################################################### M2 WITH META-ANALYSIS ########################################################
+############################################### RUNNING THE MODEL WITH DATA  #########################################################
+
+#running the brm with the data
+m2_meta <- brm(
+  formula = f2,
+  data = df,
+  family = gaussian(),
+  prior = m2_meta_priors, 
+  sample_prior = T,
+  iter = 2000,
+  control = list(adapt_delta = 0.99, max_treedepth = 20),
+  chains = 4, #change to 1 if it is the first round
+  cores = 4, #changer to 1 if it is the first round
+  backend = "cmdstanr",
+  file = here("Assignment_3", "models_anders", "m2_meta_full")
+)
+
+#----------------------------------Diagnostics----------------------------------
+#No warnings
+
+#Diagnostics
+print(m2_meta)
+#There is a good amount of EES
+
+#Checking the chains
+plot(m2_meta)
+#Catterpillars look damn fine
+
+#----------------------------------predictive-checks----------------------------
+#doing posterior-predictive checks
+pp4 <- pp_check(m2_meta, nsamples = 100)
+pp4
+#Gaussian is maybe not best fit, but works quite fine anyways
+
+#maybe use these???
+conditional_effects(m2_meta)
+plot(conditional_effects(m2_meta, spaghetti=T, 
+                         method="fitted", nsamples=100), points=T)
+plot(conditional_effects(m2_meta, spaghetti=T, 
+                         method="predict", nsamples=100), points=T)
+
+#---------------------------------prior-posterior update------------------------
+#Prior posterior update checks
+m2_meta_samples <- posterior_samples(m2_meta)
+m2_meta_samples %>% 
+  select(c("b_Languagedk", "b_Languageus", "b_Languagedk:DiagnosisTD", "b_Languageus:DiagnosisTD", "sd_Language__Intercept", "sd_Language:ID__Intercept",
+           "prior_b_Languagedk", "prior_b_Languageus", "prior_b_Languagedk:DiagnosisTD", "prior_b_Languageus:DiagnosisTD", "prior_sd_Language", "prior_sd_Language:ID")) %>% 
+  rename(
+    b_sdLanguage = sd_Language__Intercept,
+    b_sdLanguageID = "sd_Language:ID__Intercept",
+    prior_Languagedk = prior_b_Languagedk,
+    prior_Languageus = prior_b_Languageus,
+    "prior_Languagedk:DiagnosisTD" = "prior_b_Languagedk:DiagnosisTD",
+    "prior_Languageus:DiagnosisTD" = "prior_b_Languageus:DiagnosisTD",
+    prior_sdLanguage = prior_sd_Language,
+    prior_sdLanguageID = "prior_sd_Language:ID"
+  ) %>% 
+  pivot_longer(cols = everything(),
+               values_to = "value",
+               names_to = "distribution"
+               ) %>% 
+  separate(distribution, c("Distribution", "Parameter"), sep = "_") %>% 
+  mutate(Distribution = ifelse(Distribution == "b", "Posterior", "Prior")) %>% 
+  ggplot(aes(x = value, fill = Distribution)) + 
+  geom_density(alpha = 0.8) +
+  facet_wrap(~Parameter, nrow = 4) +
+  labs(title = "Prior-posterior updates in M2 without meta-analytic priors")+
+  theme_bw()+
+  theme(strip.text = element_text(size=15),
+        axis.title=element_text(size=15),
+        plot.title = element_text(size = 15, face = "bold", hjust = 0.5)) + 
+  xlim(-3,3)
+
+
+#taking a closer look at the slopes for Diagnosis in both Languages
+D4 <- m2_meta_samples %>% 
+  select(c("b_Languagedk:DiagnosisTD", "b_Languageus:DiagnosisTD", "prior_b_Languagedk:DiagnosisTD", "prior_b_Languageus:DiagnosisTD")) %>% 
+  rename(
+    "prior_Languagedk:DiagnosisTD" = "prior_b_Languagedk:DiagnosisTD",
+    "prior_Languageus:DiagnosisTD" = "prior_b_Languageus:DiagnosisTD",
+  ) %>% 
+  pivot_longer(cols = everything(),
+               values_to = "value",
+               names_to = "distribution"
+               ) %>% 
+  separate(distribution, c("Distribution", "Parameter"), sep = "_") %>% 
+  mutate(Distribution = ifelse(Distribution == "b", "Posterior", "Prior")) %>% 
+  ggplot(aes(x = value, fill = Distribution)) + 
+  geom_density(alpha = 0.8) +
+  facet_wrap(~Parameter, nrow = ) +
+  labs(title = "Prior-posterior updates for Diagnosis in M2 without meta-analytic priors")+
+  theme_bw()+
+  theme(strip.text = element_text(size=15),
+        axis.title=element_text(size=15),
+        plot.title = element_text(size = 12, face = "bold", hjust = 0.5)) 
+
+D4
+
+#------------------------------------influential data points and LOO------------
+#check for influential data-points
+m2_meta <- add_criterion(m2_meta, "loo", reloo = T)
+#3 problematic observation(s) found.
+
+plot(loo(m2_meta))
+#How to look at this plot?
+
+#below are riccardo notes
+# If deviant observations check them in the dataset, are they odd?
+# Often deviant observation tell us something important:
+## Should we use a different likelihood? e.g. robust regression?
+## Should we relax our priors for variation?
+## Are there errors in the data?
+
+
+#-----------------------------------Results-------------------------------------
+#checking the output of the model
+print(m2_meta)
+mcmc_plot(m2_meta) +
+  theme(axis.text.y = element_text(hjust = 0))
+
+
+#test your hypotheses
+hypothesis(m2_meta, "Languagedk:DiagnosisTD < 0")
+plot(hypothesis(m2_meta, "Languagedk:DiagnosisTD < 0"))
+
+hypothesis(m2_meta, "Languageus:DiagnosisTD < 0")
+plot(hypothesis(m2_meta, "Languageus:DiagnosisTD < 0"))
+#How to interpret all these numbers?
+```
+
+-----------------------------QUESTIONS------------------------------------------
+- How should be use the heterogeniety from the meta-analysis?
+
+--------------------------------------------------------------------------------
 
 Step 5: Compare the models
 - Plot priors and posteriors of the diagnosis effect in both models
 ```{r}
-
+(D1 + D2) / (D3 + D4)
 ```
 
 
 - Compare posteriors between the two models
+```{r}
+#between m1
+pp1 + pp2
+
+#between m2
+pp3 + pp4
+
+#maybe use other plots here?
+```
+
+
 - Compare the two models (LOO)
+```{r}
+##
+loo_compare(LanguageDevelopment_m0, LanguageDevelopment_m1)
+loo_model_weights(LanguageDevelopment_m0, LanguageDevelopment_m1)
+```
+
 - Discuss how they compare and whether any of them is best.
 
 Step 6: Prepare a nice write up of the analysis and answer the questions at the top.
+
+
+```{r}
+mxx <- bf(Pitch_IQR ~ 0 + Language + Language:Diagnosis)
+get_prior(mxx, data = df)
+
+mx <- bf(Pitch_IQR ~ 0 + Language:Diagnosis)
+get_prior(mx, data = df)
+```
 
 
 
@@ -499,7 +916,7 @@ Step 6: Prepare a nice write up of the analysis and answer the questions at the 
 Optional step 7: how skeptical should a prior be?
 - Try different levels of skepticism and compare them both plotting the impact on the inferred effect size and using LOO.
 
-Optional step 8: Include other predictors
+Optional step 8: Include other predictors2
 - Do age, gender and education improve the model?
 - Should they be main effects or interactions?
 
