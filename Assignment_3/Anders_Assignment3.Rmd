@@ -825,7 +825,7 @@ D4 <- m2_meta_samples %>%
   ggplot(aes(x = value, fill = Distribution)) + 
   geom_density(alpha = 0.8) +
   facet_wrap(~Parameter, nrow = ) +
-  labs(title = "Prior-posterior updates for Diagnosis in M2 without meta-analytic priors")+
+  labs(title = "Prior-posterior updates for Diagnosis in M2 with meta-analytic priors")+
   theme_bw()+
   theme(strip.text = element_text(size=15),
         axis.title=element_text(size=15),
@@ -872,6 +872,16 @@ plot(hypothesis(m2_meta, "Languageus:DiagnosisTD < 0"))
 
 Step 5: Compare the models
 - Plot priors and posteriors of the diagnosis effect in both models
+
+--------------------------------------------------------------------------------
+Points about the plot:
+-In m1: meta-priors does good, as it pushes Diagnosis in the correct direction
+-In m2: meta priors for Diagnosis are good in Languagedk because it pushes in the correct direction
+-In m2: meta priors for Diagnosis are not good in Languageus because it pushes in the wrong direction
+
+-It is good to seperate Languagedk and Languageus because Diagnosis have different effects depending on Language. Thus m2 > m1.
+--------------------------------------------------------------------------------
+
 ```{r}
 (D1 + D2) / (D3 + D4)
 ```
@@ -901,13 +911,6 @@ loo_model_weights(LanguageDevelopment_m0, LanguageDevelopment_m1)
 Step 6: Prepare a nice write up of the analysis and answer the questions at the top.
 
 
-```{r}
-mxx <- bf(Pitch_IQR ~ 0 + Language + Language:Diagnosis)
-get_prior(mxx, data = df)
-
-mx <- bf(Pitch_IQR ~ 0 + Language:Diagnosis)
-get_prior(mx, data = df)
-```
 
 
 
