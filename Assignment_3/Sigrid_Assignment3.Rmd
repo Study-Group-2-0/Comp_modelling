@@ -27,10 +27,177 @@ Step 1: Perform a meta-analysis of pitch variability from previous studies of vo
 - N.B. the livecoding video is not perfect, you *can* (but don't have to) improve it: use a t-student likelihood, test the effects of the priors and refine them, check the robustness of results to more or less skeptical priors, etc. 
 - Write down the results of the meta-analysis in terms of a prior for step 2.
 
+```{r}
+# loading packages 
+pacman::p_load(tidyverse, brms, patchwork, wesanderson, metafor, here, bayesplot, ggmcmc)
+```
+
+```{r}
+# setting up the color theme for plotting
+wes_palette('Royal2')
+
+# changing the default theme when plotting
+theme_set(
+  theme_default()  +
+    theme(plot.background = element_rect(fill = wes_palette("Royal2")[4],
+                                         color = wes_palette("Royal2")[4])
+          ))
+
+```
+
+
+```{r}
+#loading meta-analysis data
+d <- read.table(file = 'Ass3_MetaAnalysisData.tsv', sep = '\t', header = TRUE)
+
+glimpse(d)
+
+d <- d %>% 
+  mutate(
+    PitchMeanASD_Mean = as.numeric(PitchMeanASD_Mean),
+    PitchMeanTD_Mean = as.numeric(PitchMeanTD_Mean),
+    PitchMeanASD_SD = as.numeric(PitchMeanASD_SD),
+    PitchMeanTD_SD = as.numeric(PitchMeanTD_SD)
+  ) %>% 
+  slice(1:41)
+```
+
+
+```{r}
+#calculating effect size (standard mean difference)
+d <- escalc(measure = 'SMD',
+            n1i = TD_N,
+            n2i = ASD_N,
+            m1i = PitchVariabilityTD_Mean,
+            m2i = PitchVariabilityASD_Mean,
+            sd1i = PitchVariabilityTD_SD,
+            sd2i = PitchVariabilityASD_SD,
+            data = d,
+            slab = Paper
+            )
+colnames(d)
+glimpse(d)
+
+d <- d %>% 
+  mutate(
+    StandardError = sqrt(vi)) %>% 
+      rename(
+    EffectSize = yi)
+
+summary(d$EffectSize)
+summary(d$StandardError)
+```
+```{r}
+# model formula
+MA_f <- bf(EffectSize | se(StandardError) ~ 1 + (1|Population))
+
+# get priors
+get_prior(MA_f, data = d, family = gaussian())
+
+# setting priors
+MA_prior <- c(
+  prior(normal(0, 1), class = Intercept),
+  prior(normal(0, 0.3), class = sd)
+)
+
+# sampling priors only
+MA_m0 <- brm(
+  MA_f,
+  data = d, 
+  family = gaussian(),
+  prior = MA_prior, 
+  sample_prior = 'only',
+  chains = 2, 
+  cores = 2, 
+  file = here("Assignment_3", "models_sigrid", "MA_m0_prior")
+) 
+
+# prior predictive check
+pp_check(MA_m0, nsamples = 100)
+
+# building model
+MA_m1 <- brm(
+  MA_f,
+  data = d, 
+  family = gaussian(),
+  prior = MA_prior, 
+  sample_prior = T,
+  chains = 2, 
+  cores = 2,
+  file = here("Assignment_3", "models_sigrid", "MA_m1")
+) 
+
+# posterior predictive check
+pp_check(MA_m1, nsamples = 100)
+
+summary(MA_m1)
+
+# saving effects
+MA_mean = fixef(MA_m1)[[1]]
+MA_sd = fixef(MA_m1)[[2]]
+MA_heterogeneity = .32
+
+```
+
+```{r}
+plot(MA_m1)
+```
+```{r}
+##### bare for sjov
+post <- posterior_samples(MA_m1, add_chain = T)
+
+mcmc_trace(post[, c(1:3, 33)],  # we need to include column 7 because it contains the chain info 
+           facet_args = list(ncol = 3), 
+           size = .15) +
+  labs(title = "My custom trace plots") +
+  theme(legend.position = c(.95, .2))
+
+colnames(post)
+glimpse(post)
+```
+
+```{r}
+###### plotting time
+d_no_na <- d %>% 
+  drop_na(EffectSize) %>% 
+  mutate(
+    ID = paste0(Paper, Population),
+    hep = seq(1:30),
+    EffectSize = as.numeric(EffectSize)) 
+  hep = as.character
+
+d_no_na$hep = as.character(d_no_na$hep)
+d_no_na$ID = paste0(d_no_na$ID, d_no_na$hep)
+
+glimpse(d)
+
+ggplot(d_no_na, aes(x = EffectSize, xmin = (EffectSize + StandardError), xmax = (EffectSize - StandardError),y = ID)) + 
+  geom_pointrange(size = .2) +
+  geom_vline(xintercept = 0, size = .25, lty = 2) +
+  geom_text(data = mutate_if(d_no_na, is.numeric, round, 2), size = 2.5, 
+            aes(label = str_glue('{EffectSize}, SE = {StandardError}'), x = 1.4, hjust = 'inward')) +
+  labs(title = 'Effect size per study population', y = '', x= '')
+```
+
 Step 2: Analyse pitch variability in ASD in two new studies for which you have access to all the trials (not just study level estimates)
 - the data is available as Ass3_data.csv. Notice there are 2 studies (language us, and language dk), multiple trials per participant, and a few different ways to measure pitch variability (if in doubt, focus on pitch IQR, interquartile range of the log of fundamental frequency)
 - Also, let's standardize the data, so that they are compatible with our meta-analytic prior (Cohen's d is measured in SDs).
 - Is there any structure in the dataset that we should account for with random/varying effects? How would you implement that? Or, if you don't know how to do bayesian random/varying effects or don't want to bother, is there anything we would need to simplify in the dataset?
+
+```{r}
+df_f <- read_csv('Ass3_data.csv')
+
+# standardizing the data
+df <- df_f%>% 
+  mutate(
+    Language = as.factor(Language),
+    Diagnosis = as.factor(Diagnosis),
+    Pitch_IQR = rethinking::standardize(Pitch_IQR)
+  )
+
+#Structures to account for:
+# some ID's are duplicated within the different language groups
+```
 
 Step 3: Build a regression model predicting Pitch variability from Diagnosis.
 - how is the outcome distributed? (likelihood function). NB. given we are standardizing, and the meta-analysis is on that scale, gaussian is not a bad assumption, but check t-student as well. Lognormal would require us to convert the prior to that scale.
@@ -38,6 +205,130 @@ Step 3: Build a regression model predicting Pitch variability from Diagnosis.
 - use a skeptical/conservative prior for the effects of diagnosis. Remember you'll need to motivate it, test its predictions (prior predictive checks), its impact on the posteriors (prior posterior updates checks).
 - Evaluate model quality. Describe and plot the estimates. 
 
+```{r diagnosis model}
+######### BAYES #####
+# model formula
+# m1 
+m1 <- bf(Pitch_IQR ~ 0 + Diagnosis)
+
+# get priors
+get_prior(m1, data = df, family = gaussian())
+
+
+# making priors
+priors_m1 <- c(
+  prior(normal(0,1), class = b, coef = DiagnosisASD),
+  prior(normal(0,1), class = b, coef = DiagnosisTD),
+  prior(exponential(1), class = sigma)
+)
+      
+# sampling priors
+m1_prior <- brm(
+  formula = m1,
+  data = df,
+  family = gaussian(),
+  prior = priors_m1,
+  sample = "only",
+  chains = 2,
+  cores = 2,
+  file = here("Assignment_3", "models_sigrid", "m1_prior")
+)
+
+# prior predictive checks
+pp_check(m1_prior, nsamples = 1000) # is okay ??
+
+#conditional effects
+conditional_effects(m1_prior)
+plot(conditional_effects(m1_prior, spaghetti=T, 
+                         method="fitted", nsamples=100), points=T)
+
+
+# running the model again, but this time with more than samples from the prior
+m1 <- brm(
+  formula = m1,
+  data = df,
+  family = gaussian(),
+  prior = priors_m1,
+  sample_prior = T,
+  chains = 2,
+  cores = 2,
+  file = here("Assignment_3", "models_sigrid", "m1")
+)
+
+# prior posterior updates check
+pp_check(m1, nsamples = 100) # not bad
+
+# plotting and checking chains
+plot(m1)
+# chains look a-okay
+
+# summary
+summary(m1)
+```
+
+```{r diagnosis and language model}
+# m2 model formula
+m2 <- bf(Pitch_IQR ~ 0 + Language + Diagnosis:Language + (1|ID/Language))
+
+# get priors
+get_prior(m2, data = df, family = gaussian())
+
+# create priors
+priors_m2 <- c(
+  prior(normal(0,1), class = b, coef = Languageus),
+  prior(normal(0,1), class = b, coef = Languagedk),
+  prior(normal(0,1), class = b, coef = Languagedk:DiagnosisTD),
+  prior(normal(0,1), class = b, coef = Languageus:DiagnosisTD),
+  prior(exponential(1), class = sigma),
+  prior(normal(0,.5), class = sd)
+)
+
+# sampling from the priors only
+m2_prior <- brm(
+  formula = m2,
+  data = df,
+  family = gaussian(),
+  prior = priors_m2,
+  sample_prior = 'only',
+  chains = 2,
+  cores = 2,
+  file = here("Assignment_3", "models_sigrid", "m2_prior")
+)
+
+# prior predictive checks
+pp_check(m2_prior, nsamples = 100) # guess it looks okay
+
+#conditional effects
+conditional_effects(m2_prior)
+plot(conditional_effects(m2_prior, spaghetti=T, 
+                         method="fitted", nsamples=100), points=T)
+
+# running the model again, but this time with more than samples from the prior
+m2 <- brm(
+  formula = m2,
+  data = df,
+  family = gaussian(),
+  prior = priors_m2,
+  sample_prior = T,
+  iter = 2000, 
+  control = list(adapt_delta = 0.99, max_treedepth = 20),
+  chains = 4,
+  cores = 2,
+  file = here("Assignment_3", "models_sigrid", "m2")
+)
+# får fejl kan ikke regne ud hvorfor
+
+# prior posterior updates check
+pp_check(m2, nsamples = 100)
+
+# plotting and checking chains
+plot(m2)
+
+# summary
+summary(m2)
+print(m2)  # forskel?
+
+```
 Step 4: Now re-run the model with the meta-analytic prior
 - Evaluate model quality. Describe and plot the estimates. 
 - N.B. you need to assess the meta-analytic informed prior (prior pred checks, prior-posterior update checks) and if relevant you can always change it in motivated ways (e.g. too confident, doesn't let the model actually learn from the data, so increase sd)
