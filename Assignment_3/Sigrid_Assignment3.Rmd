@@ -29,18 +29,18 @@ Step 1: Perform a meta-analysis of pitch variability from previous studies of vo
 
 ```{r}
 # loading packages 
-pacman::p_load(tidyverse, brms, patchwork, wesanderson, metafor, here, bayesplot, ggmcmc)
+pacman::p_load(tidyverse, brms, patchwork, wesanderson, metafor, here, bayesplot, ggmcmc, RColorBrewer)
 ```
 
 ```{r}
 # setting up the color theme for plotting
-wes_palette('Royal2')
+wes_palette('Royal1')
 
 # changing the default theme when plotting
 theme_set(
   theme_default()  +
-    theme(plot.background = element_rect(fill = wes_palette("Royal2")[4],
-                                         color = wes_palette("Royal2")[4])
+    theme(plot.background = element_rect(fill = wes_palette("Royal1")[3],
+                                         color = wes_palette("Royal1")[3])
           ))
 
 ```
@@ -163,20 +163,19 @@ d_no_na <- d %>%
   mutate(
     ID = paste0(Paper, Population),
     hep = seq(1:30),
-    EffectSize = as.numeric(EffectSize)) 
-  hep = as.character
+    EffectSize = as.numeric(EffectSize),
+    Language = as.factor(Language)) 
 
 d_no_na$hep = as.character(d_no_na$hep)
 d_no_na$ID = paste0(d_no_na$ID, d_no_na$hep)
 
-glimpse(d)
 
 ggplot(d_no_na, aes(x = EffectSize, xmin = (EffectSize + StandardError), xmax = (EffectSize - StandardError),y = ID)) + 
-  geom_pointrange(size = .2) +
+  geom_pointrange(size = .2, aes(color = d_no_na$Language)) + 
+  scale_color_brewer(palette = 'Accent') +
   geom_vline(xintercept = 0, size = .25, lty = 2) +
   geom_text(data = mutate_if(d_no_na, is.numeric, round, 2), size = 2.5, 
-            aes(label = str_glue('{EffectSize}, SE = {StandardError}'), x = 1.4, hjust = 'inward')) +
-  labs(title = 'Effect size per study population', y = '', x= '')
+            aes(label = str_glue('{EffectSize}, SE = {StandardError}'), x = 1.4, hjust = 'inward')) + labs(title = 'Effect size per study population', y = '', x= '')
 ```
 
 Step 2: Analyse pitch variability in ASD in two new studies for which you have access to all the trials (not just study level estimates)
