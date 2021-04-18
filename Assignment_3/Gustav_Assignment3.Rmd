@@ -19,6 +19,12 @@ The questions you need to answer are: What are the consequences of using a meta-
 
 ### Step by step suggestions
 
+```{r}
+# Loading packages
+pacman::p_load(tidyverse, metafor, brms, here)
+```
+
+
 Step 1: Perform a meta-analysis of pitch variability from previous studies of voice in ASD
 - N.B. all you need is in the two intro videos
 - the data is available as Ass3_MetaAnalysisData.tsv
@@ -27,10 +33,135 @@ Step 1: Perform a meta-analysis of pitch variability from previous studies of vo
 - N.B. the livecoding video is not perfect, you *can* (but don't have to) improve it: use a t-student likelihood, test the effects of the priors and refine them, check the robustness of results to more or less skeptical priors, etc. 
 - Write down the results of the meta-analysis in terms of a prior for step 2.
 
+```{r}
+# Importing the data
+MA_d <- read_tsv(file = "Ass3_MetaAnalysisData.tsv" )
+
+```
+
+```{r}
+# Calculating the mean and standard deviation for the pitchvariability
+MA_d <- MA_d %>% filter(!is.na(Paper)) %>% 
+  escalc(measure = "SMD",
+               n1i = TD_N,
+               n2i = ASD_N,
+               m1i = PitchVariabilityTD_Mean,
+               m2i = PitchVariabilityASD_Mean,
+               sd1i = PitchVariabilityTD_SD,
+               sd2i = PitchVariabilityASD_SD,
+               slab = Paper, 
+               data = MA_d) %>% 
+  mutate(
+    StandardError = sqrt(vi)
+  ) %>% 
+  rename(
+    EffectSize = yi
+  )
+```
+
+
+```{r}
+###### Creating a model for a baysian meta analysis 
+#Formula
+MA_f <- bf(EffectSize | se(StandardError) ~ 1 + (1 | Paper))
+
+get_prior(MA_f, data = MA_d, family = gaussian)
+# Need priors for the intercept and sd of the papers
+MA_prior <- c(
+  prior(normal(0, 1), class = Intercept),
+  prior(normal(0, 0.3), class = sd)
+)
+
+# The model only with priors
+MA_m0_prior <- brm(
+  formula = MA_f,
+  data = MA_d,
+  family = gaussian(),
+  prior = MA_prior,
+  sample_prior = "only",
+  chains = 4, iter = 2000,
+  file = here("Assignment_3","models_gustav", "MA_m0_prior")
+)
+
+# prior predictive check
+pp_check(MA_m0_prior, nsamples = 100)
+### Looks descent : D
+```
+```{r}
+######## FITTING THE MODEL WITH THE DATA #####################
+
+MA_m0 <- brm(
+  formula = MA_f,
+  data = MA_d,
+  family = gaussian(),
+  prior = MA_prior,
+  sample_prior = T,
+  chains = 4, iter = 2000,
+  file = here("Assignment_3","models_gustav", "MA_m0")
+)
+
+# posterior predictive check
+pp_check(MA_m0, nsamples = 100)
+
+# Inspecting the model
+summary(MA_m0)
+
+# Hypothesis testing
+plot(hypothesis(MA_m0, "Intercept>0"))
+
+?hypothesis
+# Effect sampling size is good! 
+# Rhat = 1 , VERY GOOD
+# Good posterior predictions
+# The hypothesis testing shows a confident negative effect
+
+# Saving the model parameters for later use as meta-analytical prior
+MA_mean <- fixef(MA_m0)[[1]]
+MA_se <- fixef(MA_m0)[[2]]
+MA_hetero <- 0.34
+MA_hetero_se <- 0.10
+```
+
+
 Step 2: Analyse pitch variability in ASD in two new studies for which you have access to all the trials (not just study level estimates)
 - the data is available as Ass3_data.csv. Notice there are 2 studies (language us, and language dk), multiple trials per participant, and a few different ways to measure pitch variability (if in doubt, focus on pitch IQR, interquartile range of the log of fundamental frequency)
 - Also, let's standardize the data, so that they are compatible with our meta-analytic prior (Cohen's d is measured in SDs).
 - Is there any structure in the dataset that we should account for with random/varying effects? How would you implement that? Or, if you don't know how to do bayesian random/varying effects or don't want to bother, is there anything we would need to simplify in the dataset?
+
+```{r}
+# Reading the data and standardizing the outcome variable
+df <- read_csv("Ass3_data.csv") %>% 
+  # Standardizing
+  mutate(
+across(c("Pitch_Mean","Pitch_Median","Pitch_IQR","Pitch_MAD"), ~rethinking::standardize(.x))
+)
+
+# Visualizing the data
+df %>%
+  mutate(
+    Diagnosis = ifelse(Diagnosis == "ASD", 1, 0)
+  ) %>% 
+  ggplot()+
+  aes(x = as.numeric(Diagnosis), y = Pitch_IQR, color = Diagnosis)+
+  geom_point()+
+  stat_summary(fun = "mean", geom = "point", color = "red")+
+  stat_summary(fun = "mean", geom = "line")+
+  facet_wrap(~ as.factor(Language))+
+  labs(x = "Diagnosis", title = "Mean Pitch_IQR between Diagnosis and language")+
+  theme(legend.position = "none")
+
+### It seems like there might be a different effect of pitch variability between the two studies
+
+df %>% group_by(ID) %>% summarise(Mean_pitch_IQR = mean(Pitch_IQR)) %>% 
+  ggplot()+
+  aes(x = as.factor(ID), y = Mean_pitch_IQR)+
+  geom_point()
+
+
+#### THere is also a big spread between each participant 
+```
+
+
 
 Step 3: Build a regression model predicting Pitch variability from Diagnosis.
 - how is the outcome distributed? (likelihood function). NB. given we are standardizing, and the meta-analysis is on that scale, gaussian is not a bad assumption, but check t-student as well. Lognormal would require us to convert the prior to that scale.
@@ -38,9 +169,269 @@ Step 3: Build a regression model predicting Pitch variability from Diagnosis.
 - use a skeptical/conservative prior for the effects of diagnosis. Remember you'll need to motivate it, test its predictions (prior predictive checks), its impact on the posteriors (prior posterior updates checks).
 - Evaluate model quality. Describe and plot the estimates. 
 
+```{r}
+# Inspecting the outcome variable to choose a likelihood distribution
+ggplot(df, aes(Pitch_IQR)) + geom_density()
+# It might look like that a gaussian would be a fitting likelihood distribution for Pithc_IQR
+
+#### FORMULAS ###
+# Null model
+m0_f <- bf(Pitch_IQR ~ 1)
+# Diagnosis
+m1_f <- bf(Pitch_IQR ~ 1 + Diagnosis + (1|ID))
+get_prior(m1_f, df)
+# Full model
+m2_f <- bf(Pitch_IQR ~ 1 + Language + Language:Diagnosis + (1| Language/ID))
+
+
+```
+
+
+```{r}
+################################## Pitch_IQR ~ 1 ####################################
+#Formula
+m0_f <- bf(Pitch_IQR ~ 1)
+
+# Prior
+m0_p <- c(prior(normal(0,1), class = Intercept),
+          prior(exponential(1), class = sigma))
+
+# Creating the model without the data
+m0_prior <- brm(
+  formula = m0_f,
+  data = df,
+  family = gaussian(),
+  prior = m0_p,
+  sample_prior = "only",
+  chains = 4, iter = 2000,
+  file = here("Assignment_3","models_gustav", "m0_prior")
+)
+
+# Prior predictive check
+pp_check(m0_prior, nsamples = 100)
+
+# Creating the model with the data
+m0 <- brm(
+  formula = m0_f,
+  data = df,
+  family = gaussian(),
+  prior = m0_p,
+  sample_prior = T,
+  chains = 4, iter = 2000,
+  file = here("Assignment_3","models_gustav", "m0")
+)
+
+# Posterior predictive check
+pp_check(m0, nsamples = 100)
+
+# Inspecting the model
+summary(m0)
+
+# GOOD ESS
+# GOOD RHAT
+# 
+
+```
+
+```{r}
+############################ Pitch_IQR ~ 1 + Diagnosis + (1|ID) ####################################
+
+#Formula
+m1_f <- bf(Pitch_IQR ~ 1 + Diagnosis + (1|ID))
+
+# Prior
+m1_p <- c(prior(normal(0,1), class = Intercept),
+          prior(normal(0,0.2),class = b),
+          prior(normal(0,0.8), class = sd),
+          prior(exponential(1), class = sigma))
+
+# Motivation for the prior of the sd parameter
+df_sum <- df %>% group_by(ID) %>% summarise(mean_pitch = mean(Pitch_IQR))
+sd(df_sum$mean_pitch)
+
+
+# Creating the model without the data
+m1_prior <- brm(
+  formula = m1_f,
+  data = df,
+  family = gaussian(),
+  prior = m1_p,
+  sample_prior = "only",
+  chains = 4, iter = 2000,
+  file = here("Assignment_3","models_gustav", "m1_prior")
+)
+
+# Prior predictive check
+pp_check(m1_prior, nsamples = 100)
+
+# Creating the model with the data
+m1 <- brm(
+  formula = m1_f,
+  data = df,
+  family = gaussian(),
+  prior = m1_p,
+  sample_prior = T,
+  chains = 4, iter = 2000,
+  file = here("Assignment_3","models_gustav", "m1")
+)
+
+# Posterior predictive check
+pp_check(m1, nsamples = 100)
+
+# Inspecting the model
+summary(m1)
+
+```
+
+```{r}
+############### Pitch_IQR ~  + Language + Language:Diagnosis + (1| Language/ID) #########################
+
+#Formula
+m2_f <- bf(Pitch_IQR ~ 0 + Language + Language:Diagnosis + (1| Language/ID))
+get_prior(m2_f, df)
+
+# Prior
+m2_p <- c(prior(normal(0,1), class = b, coef = Languagedk),
+          prior(normal(0,1), class = b, coef = Languageus),
+          prior(normal(0,0.2), class = b, coef = Languagedk:DiagnosisTD),
+          prior(normal(0,0.2), class = b, coef = Languageus:DiagnosisTD),
+          prior(normal(0,0.8), class = sd),
+          prior(exponential(1), class = sigma))
+
+
+# Creating the model without the data
+m2_prior <- brm(
+  formula = m2_f,
+  data = df,
+  family = gaussian(),
+  prior = m2_p,
+  sample_prior = "only",
+  chains = 4, iter = 2000,
+  file = here("Assignment_3","models_gustav", "m2_prior")
+)
+
+# Prior predictive check
+pp_check(m2_prior, nsamples = 100)
+
+# Creating the model with the data
+m2 <- brm(
+  formula = m2_f,
+  data = df,
+  family = gaussian(),
+  prior = m2_p,
+  sample_prior = T,
+  chains = 4, iter = 2000, 
+  control = list(adapt_delta = 0.99, max_treedepth = 20),
+  file = here("Assignment_3","models_gustav", "m2")
+)
+
+# Posterior predictive check
+pp_check(m2, nsamples = 100)
+
+# Inspecting the model
+summary(m2)
+```
+
+
 Step 4: Now re-run the model with the meta-analytic prior
 - Evaluate model quality. Describe and plot the estimates. 
 - N.B. you need to assess the meta-analytic informed prior (prior pred checks, prior-posterior update checks) and if relevant you can always change it in motivated ways (e.g. too confident, doesn't let the model actually learn from the data, so increase sd)
+
+
+```{r}
+############################ Pitch_IQR ~ 1 + Diagnosis + (1|ID) ####################################
+
+#Formula
+m3_f <- bf(Pitch_IQR ~ 1 + Diagnosis + (1|ID))
+
+# Prior
+m3_p <- c(prior(normal(0,1), class = Intercept),
+          prior(normal(-0.4571659, 0.107279), class = b),
+          prior(normal(0.34, 0.1), class = sd),
+          prior(exponential(1), class = sigma))
+
+
+# Creating the model without the data
+m3_prior <- brm(
+  formula = m3_f,
+  data = df,
+  family = gaussian(),
+  prior = m3_p,
+  sample_prior = "only",
+  chains = 4, iter = 2000,
+  file = here("Assignment_3","models_gustav", "m3_prior")
+)
+
+# Prior predictive check
+pp_check(m3_prior, nsamples = 100)
+
+# Creating the model with the data
+m3 <- brm(
+  formula = m3_f,
+  data = df,
+  family = gaussian(),
+  prior = m3_p,
+  sample_prior = T,
+  chains = 4, iter = 2000,
+  file = here("Assignment_3","models_gustav", "m3")
+)
+
+# Posterior predictive check
+pp_check(m3, nsamples = 100)
+
+# Inspecting the model
+summary(m3)
+summary(m1)
+```
+
+```{r}
+############### Pitch_IQR ~  + Language + Language:Diagnosis + (1| Language/ID) #########################
+
+#Formula
+m4_f <- bf(Pitch_IQR ~ 0 + Language + Language:Diagnosis + (1| Language/ID))
+get_prior(m4_f, df)
+
+# Prior
+m4_p <- c(prior(normal(0.25,1), class = b, coef = Languagedk),
+          prior(normal(0.25,1), class = b, coef = Languageus),
+          prior(normal(-0.4571659, 0.107279), class = b, coef = Languagedk:DiagnosisTD),
+          prior(normal(-0.4571659, 0.107279), class = b, coef = Languageus:DiagnosisTD),
+          prior(normal(0.34, 0.1), class = sd),
+          prior(exponential(1), class = sigma))
+
+
+# Creating the model without the data
+m4_prior <- brm(
+  formula = m4_f,
+  data = df,
+  family = gaussian(),
+  prior = m4_p,
+  sample_prior = "only",
+  chains = 4, iter = 2000,
+  file = here("Assignment_3","models_gustav", "m4_prior")
+)
+
+# Prior predictive check
+pp_check(m4_prior, nsamples = 100)
+
+# Creating the model with the data
+m4 <- brm(
+  formula = m4_f,
+  data = df,
+  family = gaussian(),
+  prior = m4_p,
+  sample_prior = T,
+  chains = 4, iter = 2000,
+  file = here("Assignment_3","models_gustav", "m4")
+)
+
+# Posterior predictive check
+pp_check(m4, nsamples = 100)
+
+# Inspecting the model
+summary(m4)
+summary(m2)
+```
 
 Step 5: Compare the models
 - Plot priors and posteriors of the diagnosis effect in both models
