@@ -1,4 +1,4 @@
----
+x½---
 title: "Assignment 3 - Applying meta-analytic priors"
 author: "Riccardo Fusaroli"
 output: html_document
@@ -8,7 +8,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Assignment 3
+# Assignment 3
 
 In this assignment we do the following:
 - we run a Bayesian meta-analysis of pitch variability in ASD, based on previously published literature
@@ -16,6 +16,26 @@ In this assignment we do the following:
 - we assess the difference in model quality and estimates using the two priors. 
 
 The questions you need to answer are: What are the consequences of using a meta-analytic prior? Evaluate the models with conservative and meta-analytic priors. Discuss the effects on estimates. Discuss the effects on model quality. Discuss the role that meta-analytic priors should have in scientific practice. Should we systematically use them? Do they have drawbacks? Should we use them to complement more conservative approaches? How does the use of meta-analytic priors you suggest reflect the skeptical and cumulative nature of science?
+
+```{r}
+#loading packages
+pacman::p_load(tidyverse, brms, metafor, here, patchwork, wesanderson)
+```
+
+```{r}
+############################################ SETTING UP THEME FOR PLOTTING ###########################################################  
+# setting up the color theme for plotting
+wes_palette('Royal2')
+
+# changing the default theme when plotting
+theme_set(
+  theme_default()  +
+    theme(plot.background = element_rect(fill = wes_palette("Royal2")[4],
+                                         color = wes_palette("Royal2")[4])
+          ))
+
+```
+
 
 ### Step by step suggestions
 
@@ -27,16 +47,535 @@ Step 1: Perform a meta-analysis of pitch variability from previous studies of vo
 - N.B. the livecoding video is not perfect, you *can* (but don't have to) improve it: use a t-student likelihood, test the effects of the priors and refine them, check the robustness of results to more or less skeptical priors, etc. 
 - Write down the results of the meta-analysis in terms of a prior for step 2.
 
+```{r}
+#loading the data and simple preprocessing
+meta <- read_tsv("Ass3_MetaAnalysisData.tsv") %>% 
+  mutate(
+    across(c("PitchVariabilityASD_Mean", "PitchVariabilityTD_Mean", "PitchVariabilityASD_SD", "PitchVariabilityTD_SD"), ~ as.numeric(.x))
+  ) %>% 
+  subset(!is.na(Paper))
+```
+
+
+```{r}
+##################################################### COHENS'D USING ESCALC ##########################################################
+#calculating yi (effect-size) and vi(variance of effect-size) for each paper
+meta <- meta %>%  escalc(
+  measure = "SMD",
+  n1i = TD_N,
+  n2i = ASD_N,
+  m1i = PitchVariabilityTD_Mean,
+  m2i = PitchVariabilityASD_Mean,
+  sd1i = PitchVariabilityTD_SD,
+  sd2i = PitchVariabilityASD_SD,
+  data = meta,
+  slab = Paper
+)
+
+#changing variance to SE and renaming yi.
+meta <- meta %>% 
+  mutate(
+    StandardError = sqrt(vi)
+  ) %>% rename(
+    EffectSize = yi
+  )
+```
+
+```{r}
+############################################################# PLOTTING THE PAPERS ####################################################
+###### plotting time
+meta_no_na <- meta %>% 
+  drop_na(EffectSize) %>% 
+  mutate(
+    ID = paste0(Paper, Population),
+    hep = as.character(seq(1:30)),
+    EffectSize = as.numeric(EffectSize),
+    ID = paste0(ID, hep)
+    ) 
+
+ggplot(meta_no_na, aes(x = EffectSize, xmin = (EffectSize + StandardError), xmax = (EffectSize - StandardError),y = ID)) + 
+  geom_pointrange(size = .2) +
+  geom_vline(xintercept = 0, size = .25, lty = 2) +
+  geom_text(data = mutate_if(meta_no_na, is.numeric, round, 2), size = 2.5, 
+            aes(label = str_glue('{EffectSize}, SE = {StandardError}'), x = 1.4, hjust = 'inward')) +
+  labs(title = 'Effect size per study population', y = '', x= '')
+
+
+```
+
+
+```{r}
+########################################## MODELLING META-ANALYSIS ###################################################################
+#making the formula. Maybe use Population instead of Paper
+formula_meta <- bf(EffectSize | se(StandardError) ~ 1 + (1 | Paper))
+
+#chacnking out the priors
+get_prior(formula_meta, data = meta, family = gaussian())
+
+#defining the priors
+prior_meta <- c(
+  prior(normal(0,1), class = Intercept),
+  prior(normal(0,0.3), class = sd)
+)
+
+#running the brm with priors only
+m0_meta_prior <- brm(
+  formula = formula_meta,
+  data = meta,
+  family = gaussian(),
+  prior = prior_meta, 
+  sample_prior = "only",
+  chains = 2,
+  cores = 2,
+  file = here("Assignment_3", "models_anders", "m0_meta_prior")
+
+)
+
+#doing prior_predictive checks
+pp_check(m0_meta_prior, nsamples = 100)
+#they seem fine.
+
+#------------------------------ running full model
+#running the brm with the data
+m0_meta <- brm(
+  formula = formula_meta,
+  data = meta,
+  family = gaussian(),
+  prior = prior_meta, 
+  sample_prior = T,
+  chains = 2,
+  cores = 2,
+  file = here("Assignment_3", "models_anders", "m0_meta_full")
+
+)
+#doing posterior-predictive checks
+pp_check(m0_meta, nsamples = 100)
+#they seem fine.
+
+#checking the chains. They seem good.
+plot(m0_meta)
+
+#checking the output
+summary(m0_meta)
+```
+
+
+```{r}
+####################################### RESULTS FROM META-ANALYSIS ###################################################################
+meta_mean <- fixef(m0_meta)[[1]]
+meta_sd <- fixef(m0_meta)[[2]]
+meta_hetero <- 0.35 
+meta_hetero_sd <- 0.10 
+
+# meta effect: mean = -0.46, sd = 0.11, heterogeniety = 0.35
+# meaning that pitch-variability is lower in TD than ASD. So level(Diagnosis) = ASD, TD
+```
+
+
+
 Step 2: Analyse pitch variability in ASD in two new studies for which you have access to all the trials (not just study level estimates)
 - the data is available as Ass3_data.csv. Notice there are 2 studies (language us, and language dk), multiple trials per participant, and a few different ways to measure pitch variability (if in doubt, focus on pitch IQR, interquartile range of the log of fundamental frequency)
 - Also, let's standardize the data, so that they are compatible with our meta-analytic prior (Cohen's d is measured in SDs).
 - Is there any structure in the dataset that we should account for with random/varying effects? How would you implement that? Or, if you don't know how to do bayesian random/varying effects or don't want to bother, is there anything we would need to simplify in the dataset?
+```{r}
+################################################ READING DATA AND INSPECTING #########################################################
+#reading data and scaling Pitch_IQR
+df <- read_csv("Ass3_data.csv") %>% 
+  mutate(
+    Pitch_IQR = scale(Pitch_IQR),
+    ID = as.factor(ID),
+    Language = as.factor(Language),
+    Diagnosis = as.factor(Diagnosis)
+  )
+
+#Diagnosis is levelled the same as in the meta-analysis, levels(Diagnosis) = ASD, TD. The effect size from the meta-analysis was negative, meaning that pitch variability is lower in TD. 
+levels(df$Diagnosis)
+
+#checking out the outome variable
+summary(df$Pitch_IQR)
+ggplot(df, aes(x = Pitch_IQR)) + 
+  geom_density()
+```
+```{r}
+############################################# INVESTEGATING "LANGUAGE" ###############################################################
+# Visualizing the data
+df %>%
+  mutate(
+    Diagnosis = ifelse(Diagnosis == "ASD",0 , 1)
+  ) %>% 
+  ggplot()+
+  aes(x = as.numeric(Diagnosis), y = Pitch_IQR, color = Diagnosis)+
+  geom_point()+
+  stat_summary(fun = "mean", geom = "point", color = "red")+
+  stat_summary(fun = "mean", geom = "line")+
+  facet_wrap(~ as.factor(Language))+
+  labs(x = "Diagnosis", title = "Mean Pitch_IQR between Diagnosis and language")+
+  theme(legend.position = "none")
+
+df %>% group_by(ID, Language) %>% summarise(Mean_pitch_IQR = mean(Pitch_IQR)) %>% 
+  ggplot()+
+  aes(x = as.factor(ID), y = Mean_pitch_IQR, color = Language)+
+  geom_point()
+
+# It seems like there might be a different effect of pitch variability between the two studies
+# it seems that the ID's in both studies (dk and us) are identical.
+```
+
 
 Step 3: Build a regression model predicting Pitch variability from Diagnosis.
 - how is the outcome distributed? (likelihood function). NB. given we are standardizing, and the meta-analysis is on that scale, gaussian is not a bad assumption, but check t-student as well. Lognormal would require us to convert the prior to that scale.
 - how are the parameters of the likelihood distribution distributed? Which predictors should they be conditioned on? Start simple, with Diagnosis only. Add other predictors only if you have the time and energy!
 - use a skeptical/conservative prior for the effects of diagnosis. Remember you'll need to motivate it, test its predictions (prior predictive checks), its impact on the posteriors (prior posterior updates checks).
 - Evaluate model quality. Describe and plot the estimates. 
+```{r}
+####################################################### M2 WITHOUT META-ANALYSIS #####################################################
+####################################### DEFINING MODEL AND MAKING PRIOR-PREDICTIVE CHECKS ############################################
+
+#defining formula with 0 and an interaction and varying intercept for ID by language
+f2 <- bf(Pitch_IQR ~ 0 + Language + Language:Diagnosis + (1|Language/ID))
+
+#Which is equivalent to: Pitch_IQR ~ 0 + Language + Language:Diagnosis + (1 | Language) + (1 | Language:ID)
+
+
+#checking out priors
+get_prior(f2, data = df)
+
+#defining priors
+m2_no_meta_priors <- c(
+  prior(exponential(1), class = sigma),
+  prior(normal(0, 0.8), class = sd),
+  prior(normal(0,0.2), class = b, coef = Languagedk:DiagnosisTD),
+  prior(normal(0,0.2), class = b, coef = Languageus:DiagnosisTD),
+  prior(normal(0,1), class = b, coef = Languagedk),
+  prior(normal(0,1), class = b, coef = Languageus)
+)
+
+#running the brm with priors only
+m2_no_meta_prior <- brm(
+  formula = f2,
+  data = df,
+  family = gaussian(),
+  prior = m2_no_meta_priors, 
+  sample_prior = "only",
+  chains = 1,
+  cores = 1,
+  backend = "cmdstanr",
+  file = here("Assignment_3", "models_anders", "m2_no_meta_prior")
+  )
+
+
+#doing prior_predictive checks
+pp_check(m2_no_meta_prior, nsamples = 100)
+#laekker prior
+```
+```{r}
+####################################################### M2 WITHOUT META-ANALYSIS #####################################################
+############################################### RUNNING THE MODEL WITH DATA  #########################################################
+
+#running the brm with the data
+m2_no_meta <- brm(
+  formula = f2,
+  data = df,
+  family = gaussian(),
+  prior = m2_no_meta_priors, 
+  sample_prior = T,
+  iter = 2000,
+  control = list(adapt_delta = 0.99, max_treedepth = 20),
+  chains = 4, #change to 1 if it is the first round
+  cores = 4, #changer to 1 if it is the first round
+  backend = "cmdstanr",
+  file = here("Assignment_3", "models_anders", "m2_no_meta_full")
+)
+
+#----------------------------------Diagnostics----------------------------------
+#No warnings
+
+#Diagnostics
+print(m2_no_meta)
+#There is a good amount of EES
+#Rhat is 1.01 for Languagedk:DiagnosisTD
+
+#Checking the chains
+plot(m2_no_meta)
+#Catterpillars look damn fine
+```
+
+
+```{r}
+#----------------------------------predictive-checks----------------------------
+#doing posterior-predictive checks
+pp1 <- pp_check(m2_no_meta, nsamples = 100)
+pp1
+#Gaussian is maybe not best fit, but works quite fine anyways
+
+#maybe use these???
+plot(conditional_effects(m2_no_meta, spaghetti=T, 
+                         method="fitted", nsamples=100), points=T)
+```
+
+
+```{r, fig.width = 10, fit.height = 10}
+#---------------------------------prior-posterior update------------------------
+#Prior posterior update checks
+m2_no_meta_samples <- posterior_samples(m2_no_meta)
+m2_no_meta_samples %>% 
+  select(c("b_Languagedk", "b_Languageus", "b_Languagedk:DiagnosisTD", "b_Languageus:DiagnosisTD", "sd_Language__Intercept", "sd_Language:ID__Intercept",
+           "prior_b_Languagedk", "prior_b_Languageus", "prior_b_Languagedk:DiagnosisTD", "prior_b_Languageus:DiagnosisTD", "prior_sd_Language", "prior_sd_Language:ID")) %>% 
+  rename(
+    b_sdLanguage = sd_Language__Intercept,
+    b_sdLanguageID = "sd_Language:ID__Intercept",
+    prior_Languagedk = prior_b_Languagedk,
+    prior_Languageus = prior_b_Languageus,
+    "prior_Languagedk:DiagnosisTD" = "prior_b_Languagedk:DiagnosisTD",
+    "prior_Languageus:DiagnosisTD" = "prior_b_Languageus:DiagnosisTD",
+    prior_sdLanguage = prior_sd_Language,
+    prior_sdLanguageID = "prior_sd_Language:ID"
+  ) %>% 
+  pivot_longer(cols = everything(),
+               values_to = "value",
+               names_to = "distribution"
+               ) %>% 
+  separate(distribution, c("Distribution", "Parameter"), sep = "_") %>% 
+  mutate(Distribution = ifelse(Distribution == "b", "Posterior", "Prior")) %>% 
+  ggplot(aes(x = value, fill = Distribution)) + 
+  geom_density(alpha = 0.8) +
+  facet_wrap(~Parameter, nrow = 4) +
+  labs(title = "Prior-posterior updates in M2 without meta-analytic priors")+
+  theme_bw()+
+  theme(strip.text = element_text(size=15),
+        axis.title=element_text(size=15),
+        plot.title = element_text(size = 15, face = "bold", hjust = 0.5)) + 
+  xlim(-3,3)
+```
+
+
+```{r, fig.width = 10, fit.height = 10}
+#taking a closer look at the slopes for Diagnosis in both Languages
+D3 <- m2_no_meta_samples %>% 
+  select(c("b_Languagedk:DiagnosisTD", "b_Languageus:DiagnosisTD", "prior_b_Languagedk:DiagnosisTD", "prior_b_Languageus:DiagnosisTD")) %>% 
+  rename(
+    "prior_Languagedk:DiagnosisTD" = "prior_b_Languagedk:DiagnosisTD",
+    "prior_Languageus:DiagnosisTD" = "prior_b_Languageus:DiagnosisTD",
+  ) %>% 
+  pivot_longer(cols = everything(),
+               values_to = "value",
+               names_to = "distribution"
+               ) %>% 
+  separate(distribution, c("Distribution", "Parameter"), sep = "_") %>% 
+  mutate(Distribution = ifelse(Distribution == "b", "Posterior", "Prior")) %>% 
+  ggplot(aes(x = value, fill = Distribution)) + 
+  geom_density(alpha = 0.8) +
+  facet_wrap(~Parameter, nrow = ) +
+  labs(title = "Prior-posterior updates for Diagnosis in M2 without meta-analytic priors")+
+  theme_bw()+
+  scale_fill_manual(values = wes_palette(name = "Cavalcanti1")) + 
+  theme(strip.text = element_text(size=15),
+        axis.title=element_text(size=15),
+        plot.title = element_text(size = 12, face = "bold", hjust = 0.5)) 
+
+D3
+```
+
+
+```{r}
+#------------------------------------influential data points and LOO------------
+#check for influential data-points
+m2_no_meta <- add_criterion(m2_no_meta, "loo", reloo = T)
+#3 problematic observation(s) found.
+
+plot(loo(m2_no_meta))
+#How to look at this plot?
+```
+
+
+```{r}
+#-----------------------------------Results-------------------------------------
+#checking the output of the model
+print(m2_no_meta)
+mcmc_plot(m2_no_meta) +
+  theme(axis.text.y = element_text(hjust = 0))
+
+
+#test your hypotheses
+hypothesis(m2_no_meta, "Languagedk:DiagnosisTD < 0")
+plot(hypothesis(m2_no_meta, "Languagedk:DiagnosisTD < 0"))
+
+hypothesis(m2_no_meta, "Languageus:DiagnosisTD < 0")
+plot(hypothesis(m2_no_meta, "Languageus:DiagnosisTD < 0"))
+#How to interpret all these numbers?
+```
+
+```{r}
+####################################################### M2 WITH META-ANALYSIS ########################################################
+####################################### DEFINING MODEL AND MAKING PRIOR-PREDICTIVE CHECKS ############################################
+
+#defining priors
+m2_meta_priors <- c(
+  prior(exponential(1), class = sigma),
+  prior(normal(0.35, 0.10), class = sd, coef = Language),
+  prior(normal(0.35, 0.10), class = sd, coef = Language),
+  prior(normal(0.35, 0.10), class = sd, coef = Language),
+  prior(normal(0.35, 0.10), class = sd, coef = Language),
+  prior(normal(-0.46,0.11), class = b, coef = Languagedk:DiagnosisTD),
+  prior(normal(-0.46,0.11), class = b, coef = Languageus:DiagnosisTD),
+  prior(normal(0.25,1), class = b, coef = Languagedk),
+  prior(normal(0.25,1), class = b, coef = Languageus)
+)
+
+get_prior(f2, data = df)
+
+#running the brm with priors only
+m2_meta_prior <- brm(
+  formula = f2,
+  data = df,
+  family = gaussian(),
+  prior = m2_meta_priors, 
+  sample_prior = "only",
+  chains = 1,
+  cores = 1,
+  backend = "cmdstanr",
+  file = here("Assignment_3", "models_anders", "m2_meta_prior")
+)
+
+#doing prior_predictive checks
+pp_check(m2_meta_prior, nsamples = 100)
+# laekker prior
+```
+
+```{r}
+####################################################### M2 WITH META-ANALYSIS ########################################################
+############################################### RUNNING THE MODEL WITH DATA  #########################################################
+
+#running the brm with the data
+m2_meta <- brm(
+  formula = f2,
+  data = df,
+  family = gaussian(),
+  prior = m2_meta_priors, 
+  sample_prior = T,
+  iter = 2000,
+  control = list(adapt_delta = 0.99, max_treedepth = 20),
+  chains = 4, #change to 1 if it is the first round
+  cores = 4, #changer to 1 if it is the first round
+  backend = "cmdstanr",
+  file = here("Assignment_3", "models_anders", "m2_meta_full")
+)
+
+#----------------------------------Diagnostics----------------------------------
+#No warnings
+
+#Diagnostics
+print(m2_meta)
+#There is a good amount of EES
+
+#Checking the chains
+plot(m2_meta)
+#Catterpillars look damn fine
+
+#----------------------------------predictive-checks----------------------------
+#doing posterior-predictive checks
+pp4 <- pp_check(m2_meta, nsamples = 100)
+pp4
+#Gaussian is maybe not best fit, but works quite fine anyways
+
+#maybe use these???
+conditional_effects(m2_meta)
+plot(conditional_effects(m2_meta, spaghetti=T, 
+                         method="fitted", nsamples=100), points=T)
+plot(conditional_effects(m2_meta, spaghetti=T, 
+                         method="predict", nsamples=100), points=T)
+
+#---------------------------------prior-posterior update------------------------
+#Prior posterior update checks
+m2_meta_samples <- posterior_samples(m2_meta)
+m2_meta_samples %>% 
+  select(c("b_Languagedk", "b_Languageus", "b_Languagedk:DiagnosisTD", "b_Languageus:DiagnosisTD", "sd_Language__Intercept", "sd_Language:ID__Intercept",
+           "prior_b_Languagedk", "prior_b_Languageus", "prior_b_Languagedk:DiagnosisTD", "prior_b_Languageus:DiagnosisTD", "prior_sd_Language", "prior_sd_Language:ID")) %>% 
+  rename(
+    b_sdLanguage = sd_Language__Intercept,
+    b_sdLanguageID = "sd_Language:ID__Intercept",
+    prior_Languagedk = prior_b_Languagedk,
+    prior_Languageus = prior_b_Languageus,
+    "prior_Languagedk:DiagnosisTD" = "prior_b_Languagedk:DiagnosisTD",
+    "prior_Languageus:DiagnosisTD" = "prior_b_Languageus:DiagnosisTD",
+    prior_sdLanguage = prior_sd_Language,
+    prior_sdLanguageID = "prior_sd_Language:ID"
+  ) %>% 
+  pivot_longer(cols = everything(),
+               values_to = "value",
+               names_to = "distribution"
+               ) %>% 
+  separate(distribution, c("Distribution", "Parameter"), sep = "_") %>% 
+  mutate(Distribution = ifelse(Distribution == "b", "Posterior", "Prior")) %>% 
+  ggplot(aes(x = value, fill = Distribution)) + 
+  geom_density(alpha = 0.8) +
+  facet_wrap(~Parameter, nrow = 4) +
+  labs(title = "Prior-posterior updates in M2 without meta-analytic priors")+
+  theme_bw()+
+  theme(strip.text = element_text(size=15),
+        axis.title=element_text(size=15),
+        plot.title = element_text(size = 15, face = "bold", hjust = 0.5)) + 
+  xlim(-3,3)
+
+
+#taking a closer look at the slopes for Diagnosis in both Languages
+D4 <- m2_meta_samples %>% 
+  select(c("b_Languagedk:DiagnosisTD", "b_Languageus:DiagnosisTD", "prior_b_Languagedk:DiagnosisTD", "prior_b_Languageus:DiagnosisTD")) %>% 
+  rename(
+    "prior_Languagedk:DiagnosisTD" = "prior_b_Languagedk:DiagnosisTD",
+    "prior_Languageus:DiagnosisTD" = "prior_b_Languageus:DiagnosisTD",
+  ) %>% 
+  pivot_longer(cols = everything(),
+               values_to = "value",
+               names_to = "distribution"
+               ) %>% 
+  separate(distribution, c("Distribution", "Parameter"), sep = "_") %>% 
+  mutate(Distribution = ifelse(Distribution == "b", "Posterior", "Prior")) %>% 
+  ggplot(aes(x = value, fill = Distribution)) + 
+  geom_density(alpha = 0.8) +
+  facet_wrap(~Parameter, nrow = ) +
+  labs(title = "Prior-posterior updates for Diagnosis in M2 with meta-analytic priors")+
+  theme_bw()+
+  theme(strip.text = element_text(size=15),
+        axis.title=element_text(size=15),
+        plot.title = element_text(size = 12, face = "bold", hjust = 0.5)) 
+
+D4
+
+#------------------------------------influential data points and LOO------------
+#check for influential data-points
+m2_meta <- add_criterion(m2_meta, "loo", reloo = T)
+#3 problematic observation(s) found.
+
+plot(loo(m2_meta))
+#How to look at this plot?
+
+#below are riccardo notes
+# If deviant observations check them in the dataset, are they odd?
+# Often deviant observation tell us something important:
+## Should we use a different likelihood? e.g. robust regression?
+## Should we relax our priors for variation?
+## Are there errors in the data?
+
+
+#-----------------------------------Results-------------------------------------
+#checking the output of the model
+print(m2_meta)
+mcmc_plot(m2_meta) +
+  theme(axis.text.y = element_text(hjust = 0))
+
+
+#test your hypotheses
+hypothesis(m2_meta, "Languagedk:DiagnosisTD < 0")
+plot(hypothesis(m2_meta, "Languagedk:DiagnosisTD < 0"))
+
+hypothesis(m2_meta, "Languageus:DiagnosisTD < 0")
+plot(hypothesis(m2_meta, "Languageus:DiagnosisTD < 0"))
+#How to interpret all these numbers?
+```
+
+
+
 
 Step 4: Now re-run the model with the meta-analytic prior
 - Evaluate model quality. Describe and plot the estimates. 
@@ -49,6 +588,11 @@ Step 5: Compare the models
 - Discuss how they compare and whether any of them is best.
 
 Step 6: Prepare a nice write up of the analysis and answer the questions at the top.
+
+
+
+
+
 
 Optional step 7: how skeptical should a prior be?
 - Try different levels of skepticism and compare them both plotting the impact on the inferred effect size and using LOO.
