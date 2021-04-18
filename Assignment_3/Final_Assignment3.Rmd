@@ -19,19 +19,19 @@ The questions you need to answer are: What are the consequences of using a meta-
 
 ```{r}
 #loading packages
-pacman::p_load(tidyverse, brms, metafor, here, patchwork, wesanderson)
+pacman::p_load(tidyverse, brms, metafor, here, patchwork, wesanderson, RColorBrewer)
 ```
 
 ```{r}
 ############################################ SETTING UP THEME FOR PLOTTING ###########################################################  
 # setting up the color theme for plotting
-wes_palette('Royal2')
+wes_palette('Royal1')
 
 # changing the default theme when plotting
 theme_set(
   theme_default()  +
-    theme(plot.background = element_rect(fill = wes_palette("Royal2")[4],
-                                         color = wes_palette("Royal2")[4])
+    theme(plot.background = element_rect(fill = wes_palette("Royal1")[3],
+                                         color = wes_palette("Royal1")[3])
           ))
 
 ```
@@ -82,7 +82,7 @@ meta <- meta %>%
 ```
 
 ```{r}
-############################################################# PLOTTING THE PAPERS ####################################################
+###################################### PLOTTING THE PAPERS ##########################################
 ###### plotting time
 meta_no_na <- meta %>% 
   drop_na(EffectSize) %>% 
@@ -90,11 +90,13 @@ meta_no_na <- meta %>%
     ID = paste0(Paper, Population),
     hep = as.character(seq(1:30)),
     EffectSize = as.numeric(EffectSize),
-    ID = paste0(ID, hep)
+    ID = paste0(ID, hep),
+    Language = as.factor(Language)
     ) 
 
 ggplot(meta_no_na, aes(x = EffectSize, xmin = (EffectSize + StandardError), xmax = (EffectSize - StandardError),y = ID)) + 
-  geom_pointrange(size = .2) +
+  geom_pointrange(size = .2, aes(color = meta_no_na$Language)) +
+  scale_color_brewer(palette = 'Accent') +
   geom_vline(xintercept = 0, size = .25, lty = 2) +
   geom_text(data = mutate_if(meta_no_na, is.numeric, round, 2), size = 2.5, 
             aes(label = str_glue('{EffectSize}, SE = {StandardError}'), x = 1.4, hjust = 'inward')) +
@@ -196,6 +198,7 @@ summary(df$Pitch_IQR)
 ggplot(df, aes(x = Pitch_IQR)) + 
   geom_density()
 ```
+
 ```{r}
 ############################################# INVESTEGATING "LANGUAGE" ###############################################################
 # Visualizing the data
@@ -406,21 +409,23 @@ plot(hypothesis(m2_no_meta, "Languageus:DiagnosisTD < 0"))
 ```
 
 ```{r}
-####################################################### M2 WITH META-ANALYSIS ########################################################
-####################################### DEFINING MODEL AND MAKING PRIOR-PREDICTIVE CHECKS ############################################
+######################################### M2 WITH META-ANALYSIS #################################
+##################### DEFINING MODEL AND MAKING PRIOR-PREDICTIVE CHECKS #################################
 
 #defining priors
 m2_meta_priors <- c(
-  prior(exponential(1), class = sigma),
-  prior(normal(0.35, 0.10), class = sd, coef = Language),
-  prior(normal(0.35, 0.10), class = sd, coef = Language),
-  prior(normal(0.35, 0.10), class = sd, coef = Language),
-  prior(normal(0.35, 0.10), class = sd, coef = Language),
   prior(normal(-0.46,0.11), class = b, coef = Languagedk:DiagnosisTD),
   prior(normal(-0.46,0.11), class = b, coef = Languageus:DiagnosisTD),
   prior(normal(0.25,1), class = b, coef = Languagedk),
-  prior(normal(0.25,1), class = b, coef = Languageus)
+  prior(normal(0.25,1), class = b, coef = Languageus),
+  prior(exponential(1), class = sigma),
+  prior(normal(0, 0.8), class = sd, group = Intercept, coef = Language:ID),
+  prior(exponential(1), class = sd, coef = Language:ID),
+  prior(normal(0.35, 0.1), class = sd, group = Intercept, coef = Language),
+  prior(exponential(1), class = sd, coef = Language)
 )
+
+#prior(cauchy(0, 1), class = sd ?
 
 get_prior(f2, data = df)
 
