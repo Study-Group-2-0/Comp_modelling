@@ -701,13 +701,38 @@ Step 5: Compare the models
 # Posterior predictive checks in the two models
 pp1 + pp2 + plot_annotation(title = "Posterior predictions for the two models")
 ```
-```{r}
+```{r, fig.height= 10, fig.width=10}
 ################# Plotting posteriors from the two models #############################
 # adding a model variable to the two samples
 m2_meta_samples <- m2_meta_samples %>% mutate(model = "With meta-priors")
 m2_no_meta_samples <- m2_no_meta_samples %>%  mutate(model = "Without meta-priors")
 # Combining the two samples to one df
 m2_samples <- rbind(m2_meta_samples, m2_no_meta_samples)
+
+
+# Plotting the posteriors from the two models
+m2_samples %>% 
+  select(c("b_Languagedk", "b_Languageus", "b_Languagedk:DiagnosisTD", "b_Languageus:DiagnosisTD", "sd_Language__Intercept", "sd_Language:ID__Intercept", "model")) %>% 
+  rename(
+    b_sdLanguage = sd_Language__Intercept,
+    b_sdLanguageID = "sd_Language:ID__Intercept",
+  ) %>% 
+  pivot_longer(cols = starts_with("b"),
+               values_to = "value",
+               names_to = "distribution"
+               ) %>% 
+  separate(distribution, c("Distribution", "Parameter"), sep = "_") %>% 
+  # PLOTTING 
+  ggplot(aes(x = value, fill = model)) + 
+  geom_density(alpha = 0.8) +
+  facet_wrap(~Parameter, nrow = 4) +
+  labs(title = "Posterior distributions for models with and without meta priors")+
+  theme_bw()+
+  scale_fill_manual(values = wes_palette(name = "Cavalcanti1")) + 
+  theme(strip.text = element_text(size=15),
+        axis.title=element_text(size=15),
+        plot.title = element_text(size = 15, face = "bold", hjust = 0.5)) + 
+  xlim(-3,3)
 
 
 ```
