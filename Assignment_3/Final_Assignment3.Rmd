@@ -94,13 +94,21 @@ meta_no_na <- meta %>%
     Language = as.factor(Language)
     ) 
 
-ggplot(meta_no_na, aes(x = EffectSize, xmin = (EffectSize + StandardError), xmax = (EffectSize - StandardError),y = ID)) + 
-  geom_pointrange(size = .2, aes(color = meta_no_na$Language)) +
-  scale_color_brewer(palette = 'Accent') +
+ggplot(meta_no_na, 
+       aes(
+         x = EffectSize, 
+         xmin = (EffectSize + StandardError), 
+         xmax = (EffectSize - StandardError),
+         y = ID)) + 
+  geom_pointrange(
+    size = .2, aes(color = meta_no_na$Language, stroke = 1.25)) +
+  scale_color_brewer(palette = 'Paired') +
   geom_vline(xintercept = 0, size = .25, lty = 2) +
-  geom_text(data = mutate_if(meta_no_na, is.numeric, round, 2), size = 2.5, 
-            aes(label = str_glue('{EffectSize}, SE = {StandardError}'), x = 1.4, hjust = 'inward')) +
-  labs(title = 'Effect size per study population', y = '', x= '')
+  geom_text(
+    data = mutate_if(meta_no_na, is.numeric, round, 2), size = 2.5, 
+    aes(label = str_glue('{EffectSize}, SE = {StandardError}'), x = 1.4, hjust = 'inward')) +
+  labs(title = 'Effect size per study population', y = '', x= '') +
+  theme(legend.position = 'bottom', legend.title = element_blank()) 
 
 
 ```
