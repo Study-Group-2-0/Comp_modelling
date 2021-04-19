@@ -156,26 +156,35 @@ colnames(post)
 glimpse(post)
 ```
 
-```{r}
+```{r paper plot}
 ###### plotting time
 d_no_na <- d %>% 
   drop_na(EffectSize) %>% 
   mutate(
+    Paper = as.character(Paper),
+    Population = as.character(Population),
     ID = paste0(Paper, Population),
-    hep = seq(1:30),
+    hep = as.character(seq(1:30)),
     EffectSize = as.numeric(EffectSize),
-    Language = as.factor(Language)) 
+    Language = as.factor(Language), 
+    ID = paste0(ID, hep)
+    )
 
-d_no_na$hep = as.character(d_no_na$hep)
-d_no_na$ID = paste0(d_no_na$ID, d_no_na$hep)
-
-
-ggplot(d_no_na, aes(x = EffectSize, xmin = (EffectSize + StandardError), xmax = (EffectSize - StandardError),y = ID)) + 
-  geom_pointrange(size = .2, aes(color = d_no_na$Language)) + 
-  scale_color_brewer(palette = 'Accent') +
+ggplot(d_no_na, aes(
+  x = EffectSize, 
+  xmin = (EffectSize + StandardError), 
+  xmax = (EffectSize - StandardError),
+  y = ID)) + 
+  geom_pointrange(size = .2, 
+                  aes(color = d_no_na$Language, stroke = 1.25)) + 
+  scale_color_brewer(palette = 'Paired') +
   geom_vline(xintercept = 0, size = .25, lty = 2) +
   geom_text(data = mutate_if(d_no_na, is.numeric, round, 2), size = 2.5, 
-            aes(label = str_glue('{EffectSize}, SE = {StandardError}'), x = 1.4, hjust = 'inward')) + labs(title = 'Effect size per study population', y = '', x= '')
+            aes(label = str_glue('{EffectSize}, SE = {StandardError}'), x = 1.4, hjust = 'inward')) +
+  labs(title = 'Effect size per study population', y = '', x= '') +
+  theme(legend.position = 'bottom', legend.title = element_blank())
+
+#+ theme_light() +
 ```
 
 Step 2: Analyse pitch variability in ASD in two new studies for which you have access to all the trials (not just study level estimates)
